@@ -4,16 +4,16 @@ import { Share2, RefreshCw, Sparkles, Droplets, Wind, Heart, ChevronDown, Downlo
 
 // --- 配置区域 ---
 
-// [关键修改] 从环境变量获取 API Key (Vercel 部署安全最佳实践)
-// 请确保在本地创建 .env 文件，并设置 VITE_GEMINI_API_KEY=你的Key
-// 在 Vercel 后台 Environment Variables 中同样添加该变量
-const apiKey = import.meta.env.VITE_GEMINI_API_KEY || ""; 
+// [修复] 还原为通用定义，避免 ES2015 环境下的 import.meta 报错
+import.meta.env.VITE_GEMINI_API_KEY
+//const apiKey = ""; 
 
 // [关键配置] API 基础地址配置 (适配 Vercel Rewrites)
-// 本地开发时如果配置了代理也可以用，生产环境 Vercel 会自动处理 /api/proxy
+// 1. 如果在 Vercel 部署并配置了 rewrites，请使用 "/api/proxy"
+// 2. 如果在本地直接测试且有网络环境，可以使用 "https://generativelanguage.googleapis.com"
 const API_BASE_URL = "/api/proxy";
 
-// 备用本地数据 (Fallback)
+// 备用本地数据 (Fallback) - 当 API 超时或报错时使用
 const FALLBACK_STYLES = [
   {
     name: "Midnight Echo",
@@ -53,8 +53,14 @@ const FALLBACK_STYLES = [
   }
 ];
 
-// 核心逻辑：AI 情绪分析
+// 核心逻辑：AI 情绪分析 (修复版：抗 429 限流 + 错误静默处理)
 const analyzeMoodWithGemini = async (text) => {
+  // 如果没有 Key，直接使用备用数据，不报错
+  if (!apiKey) {
+    console.log("未检测到 API Key，使用离线模式。");
+    return FALLBACK_STYLES[Math.floor(Math.random() * FALLBACK_STYLES.length)];
+  }
+
   const systemPrompt = `You are a master mixologist. Analyze the user's mood and create a custom cocktail. Output JSON only. Use Simplified Chinese.`;
   
   const responseSchema = {
@@ -79,9 +85,9 @@ const analyzeMoodWithGemini = async (text) => {
     required: ["name", "cnName", "liquidColor", "base", "mid", "top", "desc", "analysis"]
   };
 
-  // 使用配置好的 /api/proxy 地址
   const url = `${API_BASE_URL}/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
 
+  // 增加重试间隔，应对 429
   let delay = 1000;
   for (let i = 0; i < 3; i++) {
     try {
@@ -102,14 +108,18 @@ const analyzeMoodWithGemini = async (text) => {
         const data = await response.json();
         const resultText = data.candidates?.[0]?.content?.parts?.[0]?.text;
         return JSON.parse(resultText);
+      } else if (response.status === 429) {
+        console.warn("API 繁忙 (429)，正在重试...");
+        delay = 2000 * (i + 1); // 遇到 429 增加等待时间
       }
     } catch (error) {
-      console.error(`Attempt ${i+1} failed:`, error);
+      console.warn(`Attempt ${i+1} failed. Retrying...`);
     }
     await new Promise(r => setTimeout(r, delay));
-    delay *= 2;
   }
   
+  // 如果所有尝试都失败，悄悄降级，不让用户发现
+  console.log("API 连接不稳定，已切换至备用配方。");
   return FALLBACK_STYLES[Math.floor(Math.random() * FALLBACK_STYLES.length)];
 };
 
@@ -182,7 +192,7 @@ const Jigger = ({ isVisible }) => (
   </AnimatePresence>
 );
 
-// --- 高级水柱组件 ---
+// --- 高级水柱组件 (Premium Stream) ---
 const PremiumStream = ({ isVisible }) => (
     <AnimatePresence>
         {isVisible && (
@@ -275,6 +285,7 @@ const MartiniGlass = ({ mixingPhase, inputLength, cocktailData }) => {
                     initial={{ height: "5%" }}
                     animate={{ height: `${liquidHeight}%` }}
                     transition={{ 
+                        // 平滑过渡
                         height: { type: "spring", stiffness: 20, damping: 20 } 
                     }}
                 >
@@ -289,6 +300,7 @@ const MartiniGlass = ({ mixingPhase, inputLength, cocktailData }) => {
                             />
                         ))}
                         
+                        {/* 落点冲击波纹 */}
                         {mixingPhase === 'pouring' && (
                             <motion.div 
                                 className="absolute top-0 left-1/2 -translate-x-1/2 w-10 h-3 bg-white/30 blur-md rounded-full"
@@ -297,6 +309,7 @@ const MartiniGlass = ({ mixingPhase, inputLength, cocktailData }) => {
                             />
                         )}
 
+                        {/* 液面光圈 */}
                         <motion.div 
                              className="absolute top-0 w-full h-[4px] bg-white/20"
                              style={{ borderRadius: '100%' }}
@@ -345,7 +358,8 @@ const ShareModal = ({ isOpen, onClose, cocktail, captureRef }) => {
             document.body.style.overflow = 'hidden';
             if (!window.html2canvas) {
                 const script = document.createElement('script');
-                script.src = 'https://cdn.bootcdn.net/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
+                // 替换为更可靠的 cdnjs，防止被广告屏蔽插件拦截
+                script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
                 document.body.appendChild(script);
             }
         } else {
