@@ -3,17 +3,10 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Share2, RefreshCw, Sparkles, Droplets, Wind, Heart, ChevronDown, Download, X, Loader2 } from 'lucide-react';
 
 // --- 配置区域 ---
-
-// [已恢复] 从环境变量获取 API Key (本地开发/Vercel 部署专用)
-// 注意：在当前在线预览框中可能会报 warning，但在真实项目中这是标准写法
 const apiKey = import.meta.env.VITE_GEMINI_API_KEY || ""; 
-
-// [关键配置] API 基础地址配置 (适配 Vercel Rewrites)
-// 1. 如果在 Vercel 部署并配置了 rewrites，请使用 "/api/proxy"
-// 2. 如果在本地直接测试且有网络环境，可以使用 "https://generativelanguage.googleapis.com"
 const API_BASE_URL = "/api/proxy";
 
-// 备用本地数据 (Fallback) - 当 API 超时或报错时使用
+// 备用本地数据 (Fallback)
 const FALLBACK_STYLES = [
   {
     name: "Midnight Echo",
@@ -53,41 +46,18 @@ const FALLBACK_STYLES = [
   }
 ];
 
-// 核心逻辑：AI 情绪分析 (修复版：抗 429 限流 + 错误静默处理)
+// 核心逻辑：AI 情绪分析
 const analyzeMoodWithGemini = async (text) => {
-  // 如果没有 Key，直接使用备用数据，不报错
   if (!apiKey) {
-    console.log("未检测到 API Key，使用离线模式。");
+    console.warn("⚠️ 未检测到 API Key，使用离线模式。");
     return FALLBACK_STYLES[Math.floor(Math.random() * FALLBACK_STYLES.length)];
   }
 
-  const systemPrompt = `You are a master mixologist. Analyze the user's mood and create a custom cocktail. Output JSON only. Use Simplified Chinese.`;
+  const systemPrompt = `You are a master mixologist. Analyze the user's mood and create a custom cocktail. Output JSON only. Use Simplified Chinese. Schema: { "name": "String", "cnName": "String", "liquidColor": "String (css rgba gradient)", "base": "String", "mid": "String", "top": "String", "desc": "String", "analysis": { "base": "String", "mid": "String", "top": "String" } }`;
   
-  const responseSchema = {
-    type: "OBJECT",
-    properties: {
-      name: { type: "STRING" },
-      cnName: { type: "STRING" },
-      liquidColor: { type: "STRING" },
-      base: { type: "STRING" },
-      mid: { type: "STRING" },
-      top: { type: "STRING" },
-      desc: { type: "STRING" },
-      analysis: {
-        type: "OBJECT",
-        properties: {
-          base: { type: "STRING" },
-          mid: { type: "STRING" },
-          top: { type: "STRING" }
-        }
-      }
-    },
-    required: ["name", "cnName", "liquidColor", "base", "mid", "top", "desc", "analysis"]
-  };
+  // [关键修改] 切换到更稳定、免费额度更高的 gemini-1.5-flash 模型
+  const url = `${API_BASE_URL}/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
 
-  const url = `${API_BASE_URL}/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
-
-  // 增加重试间隔，应对 429
   let delay = 1000;
   for (let i = 0; i < 3; i++) {
     try {
@@ -97,94 +67,56 @@ const analyzeMoodWithGemini = async (text) => {
         body: JSON.stringify({
           contents: [{ parts: [{ text: `User's mood: "${text}"` }] }],
           systemInstruction: { parts: [{ text: systemPrompt }] },
-          generationConfig: { 
-            responseMimeType: "application/json",
-            responseSchema: responseSchema
-          }
+          generationConfig: { responseMimeType: "application/json" }
         }),
       });
 
       if (response.ok) {
         const data = await response.json();
-        const resultText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+        const resultText = data.candidates?.[0]?.content?.parts?.[0]?.text.replace(/```json|```/g, '').trim();
         return JSON.parse(resultText);
       } else if (response.status === 429) {
-        console.warn("API 繁忙 (429)，正在重试...");
-        delay = 2000 * (i + 1); // 遇到 429 增加等待时间
+        console.warn(`API 限流 (429)，${delay/1000}秒后重试...`);
+      } else {
+        throw new Error(`API Error: ${response.status}`);
       }
     } catch (error) {
-      console.warn(`Attempt ${i+1} failed. Retrying...`);
+      console.warn(`请求尝试 ${i+1} 失败`);
     }
     await new Promise(r => setTimeout(r, delay));
+    delay *= 2; 
   }
   
-  // 如果所有尝试都失败，悄悄降级，不让用户发现
-  console.log("API 连接不稳定，已切换至备用配方。");
+  console.log("API 连接繁忙，已切换至大师精选配方。");
   return FALLBACK_STYLES[Math.floor(Math.random() * FALLBACK_STYLES.length)];
 };
 
 // --- 背景组件 ---
 const AmbientBackground = () => (
   <div className="absolute inset-0 z-0 overflow-hidden bg-[#080808]">
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ 
-        opacity: 1,
-        background: 'radial-gradient(circle at 50% 120%, #1e1b4b 0%, #000000 80%)'
-      }}
-      transition={{ duration: 2 }}
-      className="absolute inset-0"
-    />
-    <div className="absolute inset-0 opacity-[0.04] pointer-events-none mix-blend-overlay" 
-         style={{ backgroundImage: `url("https://grainy-gradients.vercel.app/noise.svg")` }} />
-    <motion.div 
-      animate={{ opacity: [0.1, 0.2, 0.1], scale: [1, 1.1, 1] }}
-      transition={{ duration: 10, repeat: Infinity, ease: "easeInOut" }}
-      className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[600px] h-[600px] bg-white/5 blur-[120px] rounded-full pointer-events-none"
-    />
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1, background: 'radial-gradient(circle at 50% 120%, #1e1b4b 0%, #000000 80%)' }} transition={{ duration: 2 }} className="absolute inset-0" />
+    <div className="absolute inset-0 opacity-[0.04] pointer-events-none mix-blend-overlay" style={{ backgroundImage: `url("https://grainy-gradients.vercel.app/noise.svg")` }} />
+    <motion.div animate={{ opacity: [0.1, 0.2, 0.1], scale: [1, 1.1, 1] }} transition={{ duration: 10, repeat: Infinity, ease: "easeInOut" }} className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[600px] h-[600px] bg-white/5 blur-[120px] rounded-full pointer-events-none" />
   </div>
 );
 
-// --- 金属量酒器组件 (Jigger) ---
+// --- 量酒器 ---
 const Jigger = ({ isVisible }) => (
   <AnimatePresence>
     {isVisible && (
       <motion.div
-        key="jigger-actor"
+        key="jigger"
         initial={{ y: -400, opacity: 0, rotate: 0 }}
-        animate={{ 
-          y: [-400, 75, 75, 75, -400], 
-          rotate: [0, 0, -115, -115, 0], 
-          opacity: [0, 1, 1, 1, 0]
-        }}
+        animate={{ y: [-400, 75, 75, 75, -400], rotate: [0, 0, -115, -115, 0], opacity: [0, 1, 1, 1, 0] }}
         exit={{ y: -400, opacity: 0, rotate: 0, transition: { duration: 0.8, ease: "easeInOut" } }}
-        transition={{ 
-          duration: 4.5, 
-          times: [0, 0.2, 0.3, 0.85, 1],
-          ease: "easeInOut"
-        }}
+        transition={{ duration: 5, times: [0, 0.2, 0.3, 0.85, 1], ease: "easeInOut" }}
         className="absolute left-1/2 z-50 pointer-events-none"
-        style={{ 
-          top: 0, 
-          marginLeft: '15px', 
-          transformOrigin: 'top left' 
-        }} 
+        style={{ top: 0, marginLeft: '15px', transformOrigin: 'top left' }} 
       >
         <div className="relative transform -rotate-12 scale-90">
-           <div className="w-10 h-14"
-                style={{
-                  background: 'linear-gradient(90deg, #444, #eee, #666)', 
-                  clipPath: 'polygon(0 0, 100% 0, 75% 100%, 25% 100%)',
-                  boxShadow: 'inset 0 0 8px rgba(0,0,0,0.8)'
-                }}
-           />
+           <div className="w-10 h-14" style={{ background: 'linear-gradient(90deg, #444, #eee, #666)', clipPath: 'polygon(0 0, 100% 0, 75% 100%, 25% 100%)', boxShadow: 'inset 0 0 8px rgba(0,0,0,0.8)' }} />
            <div className="w-5 h-2 bg-[#888] mx-auto -mt-[1px]" />
-           <div className="w-8 h-10 mx-auto -mt-[1px]"
-                style={{
-                  background: 'linear-gradient(90deg, #333, #ccc, #444)',
-                  clipPath: 'polygon(20% 0, 80% 0, 100% 100%, 0 100%)'
-                }}
-           />
+           <div className="w-8 h-10 mx-auto -mt-[1px]" style={{ background: 'linear-gradient(90deg, #333, #ccc, #444)', clipPath: 'polygon(20% 0, 80% 0, 100% 100%, 0 100%)' }} />
            <div className="absolute top-0 left-3 w-[1px] h-full bg-white/40 blur-[1px]" />
         </div>
       </motion.div>
@@ -192,53 +124,25 @@ const Jigger = ({ isVisible }) => (
   </AnimatePresence>
 );
 
-// --- 高级水柱组件 (Premium Stream) ---
+// --- 水柱 ---
 const PremiumStream = ({ isVisible }) => (
     <AnimatePresence>
         {isVisible && (
             <div className="absolute left-1/2 -translate-x-1/2 origin-top" style={{ top: '-35px' }}>
-                <motion.div
-                    initial={{ height: 0, opacity: 0 }}
-                    animate={{ height: "280px", opacity: 0.4 }}
-                    exit={{ height: 0, opacity: 0, transition: { duration: 0.8, ease: "easeInOut" } }}
-                    transition={{ delay: 1.5, duration: 0.5 }}
-                    className="absolute left-1/2 -translate-x-1/2 w-[10px] blur-[4px] bg-white/40"
-                />
-                
-                <motion.div
-                    initial={{ height: 0, opacity: 0 }}
-                    animate={{ height: "280px", opacity: 0.95 }}
-                    exit={{ height: 0, opacity: 0, transition: { duration: 0.8, ease: "easeInOut" } }}
-                    transition={{ delay: 1.5, duration: 0.5, ease: "circIn" }}
-                    className="relative overflow-hidden w-[3.5px] rounded-[2px]"
-                    style={{ 
-                        background: 'linear-gradient(90deg, rgba(255,255,255,0.4), rgba(255,255,255,1) 50%, rgba(255,255,255,0.4))',
-                        boxShadow: '0 0 5px rgba(255,255,255,0.3)',
-                    }}
-                >
-                        <motion.div 
-                        className="absolute inset-0 w-full h-[300%]"
-                        style={{
-                            background: 'linear-gradient(to bottom, transparent, rgba(255,255,255,0.7) 10%, transparent 20%)',
-                            backgroundSize: '100% 80px'
-                        }}
-                        animate={{ y: [0, 180] }}
-                        transition={{ duration: 0.6, repeat: Infinity, ease: "linear" }}
-                        />
+                <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "280px", opacity: 0.4 }} exit={{ height: 0, opacity: 0, transition: { duration: 0.8, ease: "easeInOut" } }} transition={{ delay: 1.5, duration: 0.5 }} className="absolute left-1/2 -translate-x-1/2 w-[10px] blur-[4px] bg-white/40" />
+                <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "280px", opacity: 0.95 }} exit={{ height: 0, opacity: 0, transition: { duration: 0.8, ease: "easeInOut" } }} transition={{ delay: 1.5, duration: 0.5, ease: "circIn" }} className="relative overflow-hidden w-[3.5px] rounded-[2px]" style={{ background: 'linear-gradient(90deg, rgba(255,255,255,0.4), rgba(255,255,255,1) 50%, rgba(255,255,255,0.4))', boxShadow: '0 0 5px rgba(255,255,255,0.3)' }}>
+                    <motion.div className="absolute inset-0 w-full h-[300%]" style={{ background: 'linear-gradient(to bottom, transparent, rgba(255,255,255,0.7) 10%, transparent 20%)', backgroundSize: '100% 80px' }} animate={{ y: [0, 180] }} transition={{ duration: 0.6, repeat: Infinity, ease: "linear" }} />
                 </motion.div>
             </div>
         )}
     </AnimatePresence>
 );
 
-// --- 马天尼杯组件 ---
+// --- 杯身 ---
 const MartiniGlass = ({ mixingPhase, inputLength, cocktailData }) => {
   const targetHeight = Math.min(30 + inputLength * 0.5, 90); 
-  
   let liquidHeight;
-  if (cocktailData) {
-      liquidHeight = 82; 
-  } else {
+  if (cocktailData) { liquidHeight = 82; } else {
       switch (mixingPhase) {
           case 'pouring': liquidHeight = 60; break;
           case 'filled': liquidHeight = 60; break;
@@ -247,82 +151,37 @@ const MartiniGlass = ({ mixingPhase, inputLength, cocktailData }) => {
           default: liquidHeight = Math.min(30 + inputLength * 0.5, 90);
       }
   }
-
-  const currentLiquidColor = cocktailData?.liquidColor || 
-    (mixingPhase === 'idle' 
-      ? 'linear-gradient(180deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0.01) 100%)' 
-      : 'linear-gradient(180deg, rgba(200,200,255,0.2) 0%, rgba(150,150,255,0.3) 100%)');
+  const currentLiquidColor = cocktailData?.liquidColor || (mixingPhase === 'idle' ? 'linear-gradient(180deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0.01) 100%)' : 'linear-gradient(180deg, rgba(200,200,255,0.2) 0%, rgba(150,150,255,0.3) 100%)');
 
   return (
     <div className="relative w-full h-[380px] flex items-end justify-center perspective-[1000px] group">
       <div className="absolute bottom-0 w-24 h-4 bg-white/5 blur-xl opacity-30 rounded-full scale-x-150" />
-      
-      <div className="absolute top-0 left-0 w-full h-full z-40 pointer-events-none">
-        <Jigger isVisible={mixingPhase === 'pouring'} />
-      </div>
+      <div className="absolute top-0 left-0 w-full h-full z-40 pointer-events-none"><Jigger isVisible={mixingPhase === 'pouring'} /></div>
 
       <motion.div 
         className="relative z-20 flex flex-col items-center origin-bottom"
-        animate={mixingPhase === 'shaking' ? { 
-            rotate: [0, -6, 0, 6, 0], 
-            x: [0, -4, 0, 4, 0],
-            y: [0, 2, 0, 2, 0]
-        } : { rotate: 0, x: 0, y: 0 }}
+        animate={mixingPhase === 'shaking' ? { rotate: [0, -6, 0, 6, 0], x: [0, -4, 0, 4, 0], y: [0, 2, 0, 2, 0] } : { rotate: 0, x: 0, y: 0 }}
         transition={mixingPhase === 'shaking' ? { duration: 4, repeat: Infinity, ease: "easeInOut" } : { duration: 0.8, ease: "easeOut" }}
       >
         <div className="relative w-64 h-32 z-30">
-            
-            <div className="absolute inset-0 z-40 pointer-events-none" 
-                 style={{ clipPath: 'polygon(-100% -1000%, 200% -1000%, 100% 0%, 50% 100%, 0% 0%)' }}>
-                <PremiumStream isVisible={mixingPhase === 'pouring'} />
-            </div>
-
+            <div className="absolute inset-0 z-40 pointer-events-none" style={{ clipPath: 'polygon(-100% -1000%, 200% -1000%, 100% 0%, 50% 100%, 0% 0%)' }}><PremiumStream isVisible={mixingPhase === 'pouring'} /></div>
             <div className="absolute inset-0 overflow-hidden" style={{ clipPath: 'polygon(0% 0%, 100% 0%, 50% 100%)' }}>
                 <div className="absolute inset-0 bg-gradient-to-b from-white/[0.04] to-transparent backdrop-blur-[1px]" />
-                
-                <motion.div 
-                    className="absolute bottom-0 left-0 w-full z-10 flex items-end justify-center"
-                    initial={{ height: "5%" }}
-                    animate={{ height: `${liquidHeight}%` }}
-                    transition={{ 
-                        height: { type: "spring", stiffness: 20, damping: 20 } 
-                    }}
-                >
+                <motion.div className="absolute bottom-0 left-0 w-full z-10 flex items-end justify-center" initial={{ height: "5%" }} animate={{ height: `${liquidHeight}%` }} transition={{ height: { type: "spring", stiffness: 20, damping: 20 } }}>
                     <motion.div className="w-full h-full relative" style={{ background: currentLiquidColor }}>
                         {(mixingPhase !== 'idle' || cocktailData) && Array.from({ length: 10 }).map((_, i) => (
-                            <motion.div
-                                key={i}
-                                className="absolute bg-white/40 rounded-full"
-                                style={{ width: 1.2, height: 1.2, left: `${Math.random() * 100}%`, top: '100%' }}
-                                animate={{ y: [0, -200], opacity: [0, 0.6, 0] }}
-                                transition={{ duration: 3, repeat: Infinity, delay: Math.random() * 2, ease: "linear" }}
-                            />
+                            <motion.div key={i} className="absolute bg-white/40 rounded-full" style={{ width: 1.2, height: 1.2, left: `${Math.random() * 100}%`, top: '100%' }} animate={{ y: [0, -200], opacity: [0, 0.6, 0] }} transition={{ duration: 3, repeat: Infinity, delay: Math.random() * 2, ease: "linear" }} />
                         ))}
-                        
-                        {mixingPhase === 'pouring' && (
-                            <motion.div 
-                                className="absolute top-0 left-1/2 -translate-x-1/2 w-10 h-3 bg-white/30 blur-md rounded-full"
-                                animate={{ scale: [1, 1.5, 1], opacity: [0.4, 0.8, 0.4] }}
-                                transition={{ duration: 0.6, repeat: Infinity }}
-                            />
-                        )}
-
-                        <motion.div 
-                             className="absolute top-0 w-full h-[4px] bg-white/20"
-                             style={{ borderRadius: '100%' }}
-                             animate={mixingPhase === 'shaking' ? { rotate: [0, 6, 0, -6, 0], scaleX: [1, 1.1, 1] } : { rotate: 0, scaleX: 1 }}
-                             transition={mixingPhase === 'shaking' ? { duration: 4, repeat: Infinity, ease: "easeInOut" } : { duration: 0.5 }}
-                        />
+                        {mixingPhase === 'pouring' && <motion.div className="absolute top-0 left-1/2 -translate-x-1/2 w-10 h-3 bg-white/30 blur-md rounded-full" animate={{ scale: [1, 1.5, 1], opacity: [0.4, 0.8, 0.4] }} transition={{ duration: 0.6, repeat: Infinity }} />}
+                        <motion.div className="absolute top-0 w-full h-[4px] bg-white/20" style={{ borderRadius: '100%' }} animate={mixingPhase === 'shaking' ? { rotate: [0, 6, 0, -6, 0], scaleX: [1, 1.1, 1] } : { rotate: 0, scaleX: 1 }} transition={mixingPhase === 'shaking' ? { duration: 4, repeat: Infinity, ease: "easeInOut" } : { duration: 0.5 }} />
                     </motion.div>
                 </motion.div>
             </div>
-            
             <div className="absolute inset-0 z-40 pointer-events-none" style={{ clipPath: 'polygon(0% 0%, 100% 0%, 50% 100%)' }}>
                  <div className="absolute top-0 right-10 w-[2px] h-full bg-gradient-to-b from-white/30 to-transparent rotate-[26deg] blur-[1px] opacity-40" />
                  <div className="absolute top-0 w-full h-[1px] bg-white/40 opacity-50" />
             </div>
         </div>
-
         <div className="relative w-[1.5px] h-32 bg-gradient-to-r from-white/10 via-white/40 to-white/10 backdrop-blur-sm z-20" />
         <div className="relative w-20 h-2 bg-gradient-to-b from-white/10 to-transparent backdrop-blur-sm rounded-[100%] border-t border-white/10 z-20 shadow-lg mt-[-1px]" />
       </motion.div>
@@ -330,7 +189,6 @@ const MartiniGlass = ({ mixingPhase, inputLength, cocktailData }) => {
   );
 };
 
-// --- 加载状态组件 ---
 const PoeticLoader = ({ step }) => (
     <div className="flex flex-col items-center gap-6 min-h-[60px]">
         <div className="flex gap-2">
@@ -339,48 +197,38 @@ const PoeticLoader = ({ step }) => (
             ))}
         </div>
         <AnimatePresence mode="wait">
-            <motion.p key={step} initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -5 }} className="text-sm font-premium text-white/70 tracking-[0.2em] font-light italic text-center">
-                {step}
-            </motion.p>
+            <motion.p key={step} initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -5 }} className="text-sm font-premium text-white/70 tracking-[0.2em] font-light italic text-center">{step}</motion.p>
         </AnimatePresence>
     </div>
 );
 
-// --- 真实分享/下载面板组件 ---
+// --- Share Modal (CDN 修复：换用 jsDelivr) ---
 const ShareModal = ({ isOpen, onClose, cocktail, captureRef }) => {
     const [isGenerating, setIsGenerating] = useState(false);
-    
     useEffect(() => {
         if (isOpen) {
             document.body.style.overflow = 'hidden';
             if (!window.html2canvas) {
                 const script = document.createElement('script');
-                script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
+                // [关键修改] 使用 jsDelivr，兼容性更好，不易被 AdBlock 拦截
+                script.src = 'https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js';
                 document.body.appendChild(script);
             }
-        } else {
-            document.body.style.overflow = '';
-        }
+        } else { document.body.style.overflow = ''; }
         return () => { document.body.style.overflow = ''; };
     }, [isOpen]);
 
     const handleGeneratePoster = async () => {
         if (!window.html2canvas || !captureRef.current) return;
-        
         setIsGenerating(true);
-        
         try {
             const canvas = await window.html2canvas(captureRef.current, {
-                backgroundColor: '#050505',
-                scale: 2,
-                useCORS: true,
-                logging: false,
+                backgroundColor: '#050505', scale: 2, useCORS: true, logging: false,
                 onclone: (clonedDoc) => {
                     const buttons = clonedDoc.querySelectorAll('button');
                     buttons.forEach(b => b.style.display = 'none'); 
                 }
             });
-
             const image = canvas.toDataURL("image/png");
             const link = document.createElement('a');
             link.href = image;
@@ -388,16 +236,8 @@ const ShareModal = ({ isOpen, onClose, cocktail, captureRef }) => {
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
-            
-            setTimeout(() => {
-                setIsGenerating(false);
-                onClose();
-            }, 500);
-
-        } catch (error) {
-            console.error("Poster generation failed:", error);
-            setIsGenerating(false);
-        }
+            setTimeout(() => { setIsGenerating(false); onClose(); }, 500);
+        } catch (error) { console.error(error); setIsGenerating(false); }
     };
 
     return (
@@ -409,9 +249,7 @@ const ShareModal = ({ isOpen, onClose, cocktail, captureRef }) => {
                         <div className="w-12 h-1 bg-white/20 rounded-full mx-auto mb-8" />
                         <div className="flex justify-between items-center mb-8">
                             <h3 className="text-xl font-title italic text-white tracking-widest">保存回忆</h3>
-                            <button onClick={onClose} className="p-2 bg-white/5 rounded-full hover:bg-white/10 transition-colors">
-                                <X size={16} className="text-white/60" />
-                            </button>
+                            <button onClick={onClose} className="p-2 bg-white/5 rounded-full hover:bg-white/10 transition-colors"><X size={16} className="text-white/60" /></button>
                         </div>
                         <button onClick={handleGeneratePoster} disabled={isGenerating} className="w-full flex items-center justify-center gap-3 bg-white text-black hover:bg-gray-200 py-4 rounded-full transition-all active:scale-95 group font-bold tracking-widest uppercase text-xs">
                             {isGenerating ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
@@ -425,25 +263,12 @@ const ShareModal = ({ isOpen, onClose, cocktail, captureRef }) => {
     );
 };
 
-// --- 滚动提示组件 ---
 const ScrollIndicator = ({ visible }) => (
     <AnimatePresence>
         {visible && (
-            <motion.div 
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1, y: [0, 5, 0] }}
-                exit={{ opacity: 0 }}
-                transition={{ opacity: { duration: 0.5 }, y: { duration: 2, repeat: Infinity, ease: "easeInOut" } }}
-                className="fixed bottom-8 left-0 w-full flex flex-col items-center justify-center z-50 pointer-events-none"
-            >
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1, y: [0, 5, 0] }} exit={{ opacity: 0 }} transition={{ opacity: { duration: 0.5 }, y: { duration: 2, repeat: Infinity, ease: "easeInOut" } }} className="fixed bottom-8 left-0 w-full flex flex-col items-center justify-center z-50 pointer-events-none">
                 <div className="flex flex-col items-center gap-2">
-                     <span className="text-[10px] tracking-[0.3em] uppercase font-premium"
-                           style={{ 
-                               color: 'rgba(255, 255, 255, 0.95)', 
-                               textShadow: '0 0 8px rgba(100, 200, 255, 0.8), 0 0 15px rgba(100, 200, 255, 0.5)'
-                           }}>
-                         下滑 · 阅览心绪特调
-                     </span>
+                     <span className="text-[10px] tracking-[0.3em] uppercase font-premium" style={{ color: 'rgba(255, 255, 255, 0.95)', textShadow: '0 0 8px rgba(100, 200, 255, 0.8), 0 0 15px rgba(100, 200, 255, 0.5)' }}>下滑 · 阅览心绪特调</span>
                      <ChevronDown size={18} style={{ color: 'rgba(255, 255, 255, 0.9)', filter: 'drop-shadow(0 0 5px rgba(100, 200, 255, 0.8))' }} />
                 </div>
             </motion.div>
@@ -451,7 +276,6 @@ const ScrollIndicator = ({ visible }) => (
     </AnimatePresence>
 );
 
-// --- 主应用 ---
 export default function MoodMixologyApp() {
   const [appState, setAppState] = useState('input');
   const [inputText, setInputText] = useState('');
@@ -475,23 +299,23 @@ export default function MoodMixologyApp() {
 
   const handleStartMixing = async () => {
     if (!inputText.trim()) return;
-    
-    if (glassRef.current) {
-        glassRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }
+    if (glassRef.current) glassRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
 
     setAppState('analyzing');
     setMixingPhase('pouring');
     setAnalysisStep("萃取思绪杂质...");
     
+    // 并行执行 API 和动画
     const apiCall = analyzeMoodWithGemini(inputText);
-    await new Promise(r => setTimeout(r, 4250)); 
+    await new Promise(r => setTimeout(r, 4250)); // Jigger 动画时长
     
     setTimeout(() => setMixingPhase('idle'), 100); 
     await new Promise(r => setTimeout(r, 750)); 
 
     setMixingPhase('shaking');
     setAnalysisStep("感知情绪基调...");
+    
+    // API 结果与最小摇晃时间同步
     const minShaking = new Promise(r => setTimeout(r, 4000));
     const [result] = await Promise.all([apiCall, minShaking]);
 
@@ -569,16 +393,13 @@ export default function MoodMixologyApp() {
             </div>
           </main>
       </div>
-
       <ScrollIndicator visible={showScrollHint} />
       <ShareModal isOpen={showShareModal} onClose={() => setShowShareModal(false)} cocktail={cocktail} captureRef={posterRef} />
-
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@1,400;1,500&family=Noto+Serif+SC:wght@200;300;400&display=swap');
         .font-premium { font-family: 'Noto Serif SC', serif; }
         .font-title { font-family: 'Cormorant Garamond', serif; }
         textarea { caret-color: white; }
-        /* 隐形滚动条 */
         ::-webkit-scrollbar { width: 3px; background: transparent; }
         ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 4px; }
       `}</style>
