@@ -3,23 +3,22 @@ export const config = {
 };
 
 export default async function handler(req) {
-  // 1. 获取请求 URL 中的查询参数 (主要是 key)
   const url = new URL(req.url);
-  const apiKey = url.searchParams.get('key');
+  const query = url.search; // 获取 ?key=...
 
-  // 2. [核心修复] 硬编码目标 URL，不再依赖前端传递的路径
-  // 这样避免了冒号(:)被转义成 %3A 导致 Google 报错
-  const targetUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+  // [终极修复] 直接写死目标地址，使用 gemini-1.5-flash-latest 确保版本兼容
+  const targetUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent${query}`;
 
   const headers = new Headers(req.headers);
   headers.delete('host');
   headers.delete('connection');
   headers.delete('origin');
+  headers.delete('referer');
   headers.set('Content-Type', 'application/json');
 
   try {
     const response = await fetch(targetUrl, {
-      method: 'POST', // 强制 POST
+      method: req.method,
       headers: headers,
       body: req.body,
     });
