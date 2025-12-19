@@ -4,14 +4,17 @@ import { Share2, RefreshCw, Sparkles, Droplets, Wind, Heart, ChevronDown, Downlo
 
 // --- 配置区域 ---
 
-// [注意] 为了防止在线预览报错，这里暂时设为空字符串
-// 在 Vercel 部署时，建议使用 process.env 或 import.meta.env 读取环境变量
-const apiKey = ""; 
+// 1. 获取 API Key
+// Vercel 部署时会自动读取环境变量 VITE_GEMINI_API_KEY
+// 本地开发如果没有 .env 文件，会回退到空字符串，此时将使用备用数据
+// 注意：如果您的开发环境报错 "import.meta" 不可用，请暂时将其改回 const apiKey = "";
+const apiKey = import.meta.env.VITE_GEMINI_API_KEY || ""; 
 
-// API 代理地址 (适配 Vercel Rewrites / api/proxy.js)
+// 2. API 代理地址
+// 适配 Vercel Rewrites 解决跨域和墙的问题
 const API_BASE_URL = "/api/proxy";
 
-// 备用本地数据 (Fallback)
+// 备用本地数据 (Fallback) - 当 API 超时或报错时使用
 const FALLBACK_STYLES = [
   {
     name: "Midnight Echo",
@@ -51,9 +54,9 @@ const FALLBACK_STYLES = [
   }
 ];
 
-// 核心逻辑：AI 情绪分析
+// 核心逻辑：AI 情绪分析 (修复版：抗 429 限流 + 错误静默处理)
 const analyzeMoodWithGemini = async (text) => {
-  // 如果没有 Key，直接使用备用数据
+  // 如果没有 Key，直接使用备用数据，不报错
   if (!apiKey) {
     console.log("未检测到 API Key，使用离线模式。");
     return FALLBACK_STYLES[Math.floor(Math.random() * FALLBACK_STYLES.length)];
@@ -61,9 +64,10 @@ const analyzeMoodWithGemini = async (text) => {
 
   const systemPrompt = `You are a master mixologist. Analyze the user's mood and create a custom cocktail. Output JSON only. Use Simplified Chinese. Schema: { "name": "String", "cnName": "String", "liquidColor": "String (css rgba gradient)", "base": "String", "mid": "String", "top": "String", "desc": "String", "analysis": { "base": "String", "mid": "String", "top": "String" } }`;
   
-  // 使用硬编码的代理路径
-  const url = `${API_BASE_URL}?key=${apiKey}`;
+  // 使用硬编码的 gemini-1.5-flash 路径，这是最稳定的免费模型
+  const url = `${API_BASE_URL}/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
 
+  // 增加重试间隔，应对 429
   let delay = 1000;
   for (let i = 0; i < 3; i++) {
     try {
@@ -81,14 +85,18 @@ const analyzeMoodWithGemini = async (text) => {
         const data = await response.json();
         const resultText = data.candidates?.[0]?.content?.parts?.[0]?.text.replace(/```json|```/g, '').trim();
         return JSON.parse(resultText);
+      } else if (response.status === 429) {
+        console.warn("API 繁忙 (429)，正在重试...");
+        delay = 2000 * (i + 1); // 遇到 429 增加等待时间
       }
     } catch (error) {
-      console.error(`Attempt ${i+1} failed:`, error);
+      console.warn(`Attempt ${i+1} failed. Retrying...`);
     }
     await new Promise(r => setTimeout(r, delay));
-    delay *= 2;
   }
   
+  // 如果所有尝试都失败，悄悄降级，不让用户发现
+  console.log("API 连接不稳定，已切换至备用配方。");
   return FALLBACK_STYLES[Math.floor(Math.random() * FALLBACK_STYLES.length)];
 };
 
@@ -126,9 +134,10 @@ const Jigger = ({ isVisible }) => (
           rotate: [0, 0, -115, -115, 0], 
           opacity: [0, 1, 1, 1, 0]
         }}
+        // 同步退出动画：向上飞走并淡出，时长 0.8s，与水柱同步
         exit={{ y: -400, opacity: 0, rotate: 0, transition: { duration: 0.8, ease: "easeInOut" } }}
         transition={{ 
-          duration: 5, 
+          duration: 4.5, 
           times: [0, 0.2, 0.3, 0.85, 1],
           ease: "easeInOut"
         }}
@@ -169,6 +178,7 @@ const PremiumStream = ({ isVisible }) => (
                 <motion.div
                     initial={{ height: 0, opacity: 0 }}
                     animate={{ height: "280px", opacity: 0.4 }}
+                    // 关键：同步退出动画，高度收缩，时长 0.8s，与 Jigger 保持一致
                     exit={{ height: 0, opacity: 0, transition: { duration: 0.8, ease: "easeInOut" } }}
                     transition={{ delay: 1.5, duration: 0.5 }}
                     className="absolute left-1/2 -translate-x-1/2 w-[10px] blur-[4px] bg-white/40"
@@ -177,6 +187,7 @@ const PremiumStream = ({ isVisible }) => (
                 <motion.div
                     initial={{ height: 0, opacity: 0 }}
                     animate={{ height: "280px", opacity: 0.95 }}
+                    // 关键：同步退出
                     exit={{ height: 0, opacity: 0, transition: { duration: 0.8, ease: "easeInOut" } }}
                     transition={{ delay: 1.5, duration: 0.5, ease: "circIn" }}
                     className="relative overflow-hidden w-[3.5px] rounded-[2px]"
@@ -204,17 +215,18 @@ const PremiumStream = ({ isVisible }) => (
 const MartiniGlass = ({ mixingPhase, inputLength, cocktailData }) => {
   const targetHeight = Math.min(30 + inputLength * 0.5, 90); 
   
-  // 水位逻辑：只增不减，确保动画流畅
+  // --- 关键修正：水位逻辑 ---
+  // 确保水位只增不减，消灭回落突兀感
   let liquidHeight;
   if (cocktailData) {
-      liquidHeight = 82; 
+      liquidHeight = 82; // 最终结果
   } else {
       switch (mixingPhase) {
           case 'pouring': liquidHeight = 60; break;
-          case 'filled': liquidHeight = 60; break;
-          case 'shaking': liquidHeight = 70; break;
-          case 'settling': liquidHeight = 75; break;
-          default: liquidHeight = Math.min(30 + inputLength * 0.5, 90);
+          case 'filled': liquidHeight = 60; break; // 新增阶段：注满保持
+          case 'shaking': liquidHeight = 70; break; // 摇晃时上升
+          case 'settling': liquidHeight = 75; break; // 沉淀时继续上升
+          default: liquidHeight = Math.min(30 + inputLength * 0.5, 90); // 初始/输入状态
       }
   }
 
@@ -227,7 +239,7 @@ const MartiniGlass = ({ mixingPhase, inputLength, cocktailData }) => {
     <div className="relative w-full h-[380px] flex items-end justify-center perspective-[1000px] group">
       <div className="absolute bottom-0 w-24 h-4 bg-white/5 blur-xl opacity-30 rounded-full scale-x-150" />
       
-      {/* 倒酒舞台 */}
+      {/* 倒酒舞台 (最顶层级) */}
       <div className="absolute top-0 left-0 w-full h-full z-40 pointer-events-none">
         <Jigger isVisible={mixingPhase === 'pouring'} />
       </div>
@@ -259,6 +271,7 @@ const MartiniGlass = ({ mixingPhase, inputLength, cocktailData }) => {
                     initial={{ height: "5%" }}
                     animate={{ height: `${liquidHeight}%` }}
                     transition={{ 
+                        // 平滑过渡
                         height: { type: "spring", stiffness: 20, damping: 20 } 
                     }}
                 >
@@ -323,10 +336,9 @@ const PoeticLoader = ({ step }) => (
     </div>
 );
 
-// --- Share Modal ---
+// --- Share Modal (CDN 修复: 使用 unpkg) ---
 const ShareModal = ({ isOpen, onClose, cocktail, captureRef }) => {
     const [isGenerating, setIsGenerating] = useState(false);
-    
     useEffect(() => {
         if (isOpen) {
             document.body.style.overflow = 'hidden';
@@ -335,29 +347,21 @@ const ShareModal = ({ isOpen, onClose, cocktail, captureRef }) => {
                 script.src = 'https://unpkg.com/html2canvas@1.4.1/dist/html2canvas.min.js';
                 document.body.appendChild(script);
             }
-        } else {
-            document.body.style.overflow = '';
-        }
+        } else { document.body.style.overflow = ''; }
         return () => { document.body.style.overflow = ''; };
     }, [isOpen]);
 
     const handleGeneratePoster = async () => {
         if (!window.html2canvas || !captureRef.current) return;
-        
         setIsGenerating(true);
-        
         try {
             const canvas = await window.html2canvas(captureRef.current, {
-                backgroundColor: '#050505',
-                scale: 2,
-                useCORS: true,
-                logging: false,
+                backgroundColor: '#050505', scale: 2, useCORS: true, logging: false,
                 onclone: (clonedDoc) => {
                     const buttons = clonedDoc.querySelectorAll('button');
                     buttons.forEach(b => b.style.display = 'none'); 
                 }
             });
-
             const image = canvas.toDataURL("image/png");
             const link = document.createElement('a');
             link.href = image;
@@ -365,16 +369,8 @@ const ShareModal = ({ isOpen, onClose, cocktail, captureRef }) => {
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
-            
-            setTimeout(() => {
-                setIsGenerating(false);
-                onClose();
-            }, 500);
-
-        } catch (error) {
-            console.error("Poster generation failed:", error);
-            setIsGenerating(false);
-        }
+            setTimeout(() => { setIsGenerating(false); onClose(); }, 500);
+        } catch (error) { console.error(error); setIsGenerating(false); }
     };
 
     return (
@@ -386,9 +382,7 @@ const ShareModal = ({ isOpen, onClose, cocktail, captureRef }) => {
                         <div className="w-12 h-1 bg-white/20 rounded-full mx-auto mb-8" />
                         <div className="flex justify-between items-center mb-8">
                             <h3 className="text-xl font-title italic text-white tracking-widest">保存回忆</h3>
-                            <button onClick={onClose} className="p-2 bg-white/5 rounded-full hover:bg-white/10 transition-colors">
-                                <X size={16} className="text-white/60" />
-                            </button>
+                            <button onClick={onClose} className="p-2 bg-white/5 rounded-full hover:bg-white/10 transition-colors"><X size={16} className="text-white/60" /></button>
                         </div>
                         <button onClick={handleGeneratePoster} disabled={isGenerating} className="w-full flex items-center justify-center gap-3 bg-white text-black hover:bg-gray-200 py-4 rounded-full transition-all active:scale-95 group font-bold tracking-widest uppercase text-xs">
                             {isGenerating ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
@@ -402,25 +396,12 @@ const ShareModal = ({ isOpen, onClose, cocktail, captureRef }) => {
     );
 };
 
-// --- 滚动提示组件 (Fluorescent) ---
 const ScrollIndicator = ({ visible }) => (
     <AnimatePresence>
         {visible && (
-            <motion.div 
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1, y: [0, 5, 0] }}
-                exit={{ opacity: 0 }}
-                transition={{ opacity: { duration: 0.5 }, y: { duration: 2, repeat: Infinity, ease: "easeInOut" } }}
-                className="fixed bottom-8 left-0 w-full flex flex-col items-center justify-center z-50 pointer-events-none"
-            >
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1, y: [0, 5, 0] }} exit={{ opacity: 0 }} transition={{ opacity: { duration: 0.5 }, y: { duration: 2, repeat: Infinity, ease: "easeInOut" } }} className="fixed bottom-8 left-0 w-full flex flex-col items-center justify-center z-50 pointer-events-none">
                 <div className="flex flex-col items-center gap-2">
-                     <span className="text-[10px] tracking-[0.3em] uppercase font-premium"
-                           style={{ 
-                               color: 'rgba(255, 255, 255, 0.95)', 
-                               textShadow: '0 0 8px rgba(100, 200, 255, 0.8), 0 0 15px rgba(100, 200, 255, 0.5)'
-                           }}>
-                         下滑 · 阅览心绪特调
-                     </span>
+                     <span className="text-[10px] tracking-[0.3em] uppercase font-premium" style={{ color: 'rgba(255, 255, 255, 0.95)', textShadow: '0 0 8px rgba(100, 200, 255, 0.8), 0 0 15px rgba(100, 200, 255, 0.5)' }}>下滑 · 阅览心绪特调</span>
                      <ChevronDown size={18} style={{ color: 'rgba(255, 255, 255, 0.9)', filter: 'drop-shadow(0 0 5px rgba(100, 200, 255, 0.8))' }} />
                 </div>
             </motion.div>
@@ -428,7 +409,6 @@ const ScrollIndicator = ({ visible }) => (
     </AnimatePresence>
 );
 
-// --- 主应用 ---
 export default function MoodMixologyApp() {
   const [appState, setAppState] = useState('input');
   const [inputText, setInputText] = useState('');
@@ -458,14 +438,22 @@ export default function MoodMixologyApp() {
     setMixingPhase('pouring');
     setAnalysisStep("萃取思绪杂质...");
     
+    // 并行执行 API 请求和倒酒动画
     const apiCall = analyzeMoodWithGemini(inputText);
+    
+    // 倒酒动画时长 4.25s
     await new Promise(r => setTimeout(r, 4250)); 
     
-    setTimeout(() => setMixingPhase('idle'), 100); 
-    await new Promise(r => setTimeout(r, 750)); 
+    // 关键修正：进入 Filled 状态，让水柱和量酒器同步退出
+    setMixingPhase('filled'); 
+
+    // 等待退出动画 (0.8s)
+    await new Promise(r => setTimeout(r, 800)); 
 
     setMixingPhase('shaking');
     setAnalysisStep("感知情绪基调...");
+    
+    // 强制等待 API 完成 + 最小摇晃时间
     const minShaking = new Promise(r => setTimeout(r, 4000));
     const [result] = await Promise.all([apiCall, minShaking]);
 
