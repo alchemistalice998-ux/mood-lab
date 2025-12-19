@@ -4,10 +4,10 @@ export const config = {
 
 export default async function handler(req) {
   const url = new URL(req.url);
-  const query = url.search; // 获取 ?key=...
+  const query = url.search; 
 
-  // [终极修复] 直接写死目标地址，使用 gemini-1.5-flash-latest 确保版本兼容
-  const targetUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent${query}`;
+  // [修复] 回退到标准模型名称 gemini-1.5-flash，这是最稳定的版本
+  const targetUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent${query}`;
 
   const headers = new Headers(req.headers);
   headers.delete('host');
