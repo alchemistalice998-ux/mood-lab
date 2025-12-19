@@ -4,17 +4,14 @@ import { Share2, RefreshCw, Sparkles, Droplets, Wind, Heart, ChevronDown, Downlo
 
 // --- 配置区域 ---
 
-// 1. 获取 API Key
-// Vercel 部署时会自动读取环境变量 VITE_GEMINI_API_KEY
-// 本地开发如果没有 .env 文件，会回退到空字符串，此时将使用备用数据
-// 注意：如果您的开发环境报错 "import.meta" 不可用，请暂时将其改回 const apiKey = "";
+// [环境变量] 本地开发请在 .env 文件配置 VITE_GEMINI_API_KEY
+// Vercel 部署请在 Settings -> Environment Variables 配置
 const apiKey = import.meta.env.VITE_GEMINI_API_KEY || ""; 
 
-// 2. API 代理地址
-// 适配 Vercel Rewrites 解决跨域和墙的问题
+// [关键配置] 指向 Vercel 的 Serverless Function 文件 api/proxy.js
 const API_BASE_URL = "/api/proxy";
 
-// 备用本地数据 (Fallback) - 当 API 超时或报错时使用
+// 备用本地数据 (Fallback)
 const FALLBACK_STYLES = [
   {
     name: "Midnight Echo",
@@ -54,9 +51,8 @@ const FALLBACK_STYLES = [
   }
 ];
 
-// 核心逻辑：AI 情绪分析 (修复版：抗 429 限流 + 错误静默处理)
+// 核心逻辑：AI 情绪分析
 const analyzeMoodWithGemini = async (text) => {
-  // 如果没有 Key，直接使用备用数据，不报错
   if (!apiKey) {
     console.log("未检测到 API Key，使用离线模式。");
     return FALLBACK_STYLES[Math.floor(Math.random() * FALLBACK_STYLES.length)];
@@ -64,10 +60,11 @@ const analyzeMoodWithGemini = async (text) => {
 
   const systemPrompt = `You are a master mixologist. Analyze the user's mood and create a custom cocktail. Output JSON only. Use Simplified Chinese. Schema: { "name": "String", "cnName": "String", "liquidColor": "String (css rgba gradient)", "base": "String", "mid": "String", "top": "String", "desc": "String", "analysis": { "base": "String", "mid": "String", "top": "String" } }`;
   
-  // 使用硬编码的 gemini-1.5-flash 路径，这是最稳定的免费模型
-  const url = `${API_BASE_URL}/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+  // [关键修复] URL 不再包含长路径，直接指向 /api/proxy
+  // 后端的 proxy.js 会负责拼接 Google 的地址
+  const url = `${API_BASE_URL}?key=${apiKey}`;
 
-  // 增加重试间隔，应对 429
+  // 增加重试逻辑，应对 429
   let delay = 1000;
   for (let i = 0; i < 3; i++) {
     try {
@@ -85,18 +82,19 @@ const analyzeMoodWithGemini = async (text) => {
         const data = await response.json();
         const resultText = data.candidates?.[0]?.content?.parts?.[0]?.text.replace(/```json|```/g, '').trim();
         return JSON.parse(resultText);
-      } else if (response.status === 429) {
-        console.warn("API 繁忙 (429)，正在重试...");
-        delay = 2000 * (i + 1); // 遇到 429 增加等待时间
+      } else {
+        // 如果出错，打印状态码
+        console.warn(`API Error ${response.status}`);
       }
     } catch (error) {
-      console.warn(`Attempt ${i+1} failed. Retrying...`);
+      console.warn(`Attempt ${i+1} failed.`);
     }
+    // 指数退避等待
     await new Promise(r => setTimeout(r, delay));
+    delay *= 2;
   }
   
-  // 如果所有尝试都失败，悄悄降级，不让用户发现
-  console.log("API 连接不稳定，已切换至备用配方。");
+  // 失败则使用备用数据
   return FALLBACK_STYLES[Math.floor(Math.random() * FALLBACK_STYLES.length)];
 };
 
@@ -134,7 +132,6 @@ const Jigger = ({ isVisible }) => (
           rotate: [0, 0, -115, -115, 0], 
           opacity: [0, 1, 1, 1, 0]
         }}
-        // 同步退出动画：向上飞走并淡出，时长 0.8s，与水柱同步
         exit={{ y: -400, opacity: 0, rotate: 0, transition: { duration: 0.8, ease: "easeInOut" } }}
         transition={{ 
           duration: 4.5, 
@@ -170,7 +167,7 @@ const Jigger = ({ isVisible }) => (
   </AnimatePresence>
 );
 
-// --- 高级水柱组件 (Premium Stream) ---
+// --- 高级水柱组件 ---
 const PremiumStream = ({ isVisible }) => (
     <AnimatePresence>
         {isVisible && (
@@ -178,7 +175,6 @@ const PremiumStream = ({ isVisible }) => (
                 <motion.div
                     initial={{ height: 0, opacity: 0 }}
                     animate={{ height: "280px", opacity: 0.4 }}
-                    // 关键：同步退出动画，高度收缩，时长 0.8s，与 Jigger 保持一致
                     exit={{ height: 0, opacity: 0, transition: { duration: 0.8, ease: "easeInOut" } }}
                     transition={{ delay: 1.5, duration: 0.5 }}
                     className="absolute left-1/2 -translate-x-1/2 w-[10px] blur-[4px] bg-white/40"
@@ -187,7 +183,6 @@ const PremiumStream = ({ isVisible }) => (
                 <motion.div
                     initial={{ height: 0, opacity: 0 }}
                     animate={{ height: "280px", opacity: 0.95 }}
-                    // 关键：同步退出
                     exit={{ height: 0, opacity: 0, transition: { duration: 0.8, ease: "easeInOut" } }}
                     transition={{ delay: 1.5, duration: 0.5, ease: "circIn" }}
                     className="relative overflow-hidden w-[3.5px] rounded-[2px]"
@@ -215,18 +210,16 @@ const PremiumStream = ({ isVisible }) => (
 const MartiniGlass = ({ mixingPhase, inputLength, cocktailData }) => {
   const targetHeight = Math.min(30 + inputLength * 0.5, 90); 
   
-  // --- 关键修正：水位逻辑 ---
-  // 确保水位只增不减，消灭回落突兀感
   let liquidHeight;
   if (cocktailData) {
-      liquidHeight = 82; // 最终结果
+      liquidHeight = 82; 
   } else {
       switch (mixingPhase) {
           case 'pouring': liquidHeight = 60; break;
-          case 'filled': liquidHeight = 60; break; // 新增阶段：注满保持
-          case 'shaking': liquidHeight = 70; break; // 摇晃时上升
-          case 'settling': liquidHeight = 75; break; // 沉淀时继续上升
-          default: liquidHeight = Math.min(30 + inputLength * 0.5, 90); // 初始/输入状态
+          case 'filled': liquidHeight = 60; break;
+          case 'shaking': liquidHeight = 70; break;
+          case 'settling': liquidHeight = 75; break;
+          default: liquidHeight = Math.min(30 + inputLength * 0.5, 90);
       }
   }
 
@@ -239,7 +232,6 @@ const MartiniGlass = ({ mixingPhase, inputLength, cocktailData }) => {
     <div className="relative w-full h-[380px] flex items-end justify-center perspective-[1000px] group">
       <div className="absolute bottom-0 w-24 h-4 bg-white/5 blur-xl opacity-30 rounded-full scale-x-150" />
       
-      {/* 倒酒舞台 (最顶层级) */}
       <div className="absolute top-0 left-0 w-full h-full z-40 pointer-events-none">
         <Jigger isVisible={mixingPhase === 'pouring'} />
       </div>
@@ -255,28 +247,23 @@ const MartiniGlass = ({ mixingPhase, inputLength, cocktailData }) => {
       >
         <div className="relative w-64 h-32 z-30">
             
-            {/* 水柱容器 */}
             <div className="absolute inset-0 z-40 pointer-events-none" 
                  style={{ clipPath: 'polygon(-100% -1000%, 200% -1000%, 100% 0%, 50% 100%, 0% 0%)' }}>
                 <PremiumStream isVisible={mixingPhase === 'pouring'} />
             </div>
 
-            {/* 杯身玻璃与液体容器 */}
             <div className="absolute inset-0 overflow-hidden" style={{ clipPath: 'polygon(0% 0%, 100% 0%, 50% 100%)' }}>
                 <div className="absolute inset-0 bg-gradient-to-b from-white/[0.04] to-transparent backdrop-blur-[1px]" />
                 
-                {/* 液体层 */}
                 <motion.div 
                     className="absolute bottom-0 left-0 w-full z-10 flex items-end justify-center"
                     initial={{ height: "5%" }}
                     animate={{ height: `${liquidHeight}%` }}
                     transition={{ 
-                        // 平滑过渡
                         height: { type: "spring", stiffness: 20, damping: 20 } 
                     }}
                 >
                     <motion.div className="w-full h-full relative" style={{ background: currentLiquidColor }}>
-                        {/* 气泡 */}
                         {(mixingPhase !== 'idle' || cocktailData) && Array.from({ length: 10 }).map((_, i) => (
                             <motion.div
                                 key={i}
@@ -287,7 +274,6 @@ const MartiniGlass = ({ mixingPhase, inputLength, cocktailData }) => {
                             />
                         ))}
                         
-                        {/* 落点冲击波纹 */}
                         {mixingPhase === 'pouring' && (
                             <motion.div 
                                 className="absolute top-0 left-1/2 -translate-x-1/2 w-10 h-3 bg-white/30 blur-md rounded-full"
@@ -296,7 +282,6 @@ const MartiniGlass = ({ mixingPhase, inputLength, cocktailData }) => {
                             />
                         )}
 
-                        {/* 液面光圈 */}
                         <motion.div 
                              className="absolute top-0 w-full h-[4px] bg-white/20"
                              style={{ borderRadius: '100%' }}
@@ -313,7 +298,7 @@ const MartiniGlass = ({ mixingPhase, inputLength, cocktailData }) => {
             </div>
         </div>
 
-        <div className="relative w-[1.5px] h-32 bg-gradient-to-r from-white/10 via-white/40 to-white/10 backdrop-blur-sm z-20" />
+        <div className="relative w-[1.5px] h-32 bg-gradient-to-r from-white/10 via-white/30 to-white/10 backdrop-blur-sm z-20" />
         <div className="relative w-20 h-2 bg-gradient-to-b from-white/10 to-transparent backdrop-blur-sm rounded-[100%] border-t border-white/10 z-20 shadow-lg mt-[-1px]" />
       </motion.div>
     </div>
@@ -336,9 +321,10 @@ const PoeticLoader = ({ step }) => (
     </div>
 );
 
-// --- Share Modal (CDN 修复: 使用 unpkg) ---
+// --- Share Modal ---
 const ShareModal = ({ isOpen, onClose, cocktail, captureRef }) => {
     const [isGenerating, setIsGenerating] = useState(false);
+    
     useEffect(() => {
         if (isOpen) {
             document.body.style.overflow = 'hidden';
@@ -347,7 +333,9 @@ const ShareModal = ({ isOpen, onClose, cocktail, captureRef }) => {
                 script.src = 'https://unpkg.com/html2canvas@1.4.1/dist/html2canvas.min.js';
                 document.body.appendChild(script);
             }
-        } else { document.body.style.overflow = ''; }
+        } else {
+            document.body.style.overflow = '';
+        }
         return () => { document.body.style.overflow = ''; };
     }, [isOpen]);
 
@@ -356,7 +344,10 @@ const ShareModal = ({ isOpen, onClose, cocktail, captureRef }) => {
         setIsGenerating(true);
         try {
             const canvas = await window.html2canvas(captureRef.current, {
-                backgroundColor: '#050505', scale: 2, useCORS: true, logging: false,
+                backgroundColor: '#050505',
+                scale: 2,
+                useCORS: true,
+                logging: false,
                 onclone: (clonedDoc) => {
                     const buttons = clonedDoc.querySelectorAll('button');
                     buttons.forEach(b => b.style.display = 'none'); 
@@ -416,7 +407,6 @@ export default function MoodMixologyApp() {
   const [analysisStep, setAnalysisStep] = useState('');
   const [mixingPhase, setMixingPhase] = useState('idle');
   const [showShareModal, setShowShareModal] = useState(false);
-  
   const [showScrollHint, setShowScrollHint] = useState(false);
   const glassRef = useRef(null);
   const posterRef = useRef(null); 
@@ -438,22 +428,13 @@ export default function MoodMixologyApp() {
     setMixingPhase('pouring');
     setAnalysisStep("萃取思绪杂质...");
     
-    // 并行执行 API 请求和倒酒动画
     const apiCall = analyzeMoodWithGemini(inputText);
-    
-    // 倒酒动画时长 4.25s
     await new Promise(r => setTimeout(r, 4250)); 
-    
-    // 关键修正：进入 Filled 状态，让水柱和量酒器同步退出
-    setMixingPhase('filled'); 
-
-    // 等待退出动画 (0.8s)
-    await new Promise(r => setTimeout(r, 800)); 
+    setTimeout(() => setMixingPhase('idle'), 100); 
+    await new Promise(r => setTimeout(r, 750)); 
 
     setMixingPhase('shaking');
     setAnalysisStep("感知情绪基调...");
-    
-    // 强制等待 API 完成 + 最小摇晃时间
     const minShaking = new Promise(r => setTimeout(r, 4000));
     const [result] = await Promise.all([apiCall, minShaking]);
 
@@ -531,16 +512,13 @@ export default function MoodMixologyApp() {
             </div>
           </main>
       </div>
-
       <ScrollIndicator visible={showScrollHint} />
       <ShareModal isOpen={showShareModal} onClose={() => setShowShareModal(false)} cocktail={cocktail} captureRef={posterRef} />
-
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@1,400;1,500&family=Noto+Serif+SC:wght@200;300;400&display=swap');
         .font-premium { font-family: 'Noto Serif SC', serif; }
         .font-title { font-family: 'Cormorant Garamond', serif; }
         textarea { caret-color: white; }
-        /* 隐形滚动条 */
         ::-webkit-scrollbar { width: 3px; background: transparent; }
         ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 4px; }
       `}</style>
