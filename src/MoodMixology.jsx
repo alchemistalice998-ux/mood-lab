@@ -3,11 +3,16 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Share2, RefreshCw, Sparkles, Droplets, Wind, Heart, ChevronDown, Download, X, Loader2 } from 'lucide-react';
 
 // --- 配置区域 ---
+
+// 1. API Key
+// Vercel 部署时请在后台 Environment Variables 设置 VITE_GEMINI_API_KEY
 const apiKey = import.meta.env.VITE_GEMINI_API_KEY || ""; 
-// API 地址指向我们刚才创建的 api/proxy.js
+
+// 2. API 地址
+// 直接指向我们的后端函数，不需要加 v1beta 等后缀，因为后端已经写死了
 const API_BASE_URL = "/api/proxy";
 
-// 备用数据
+// 备用本地数据
 const FALLBACK_STYLES = [
   {
     name: "Midnight Echo",
@@ -15,7 +20,7 @@ const FALLBACK_STYLES = [
     liquidColor: "linear-gradient(180deg, rgba(30, 41, 59, 0.9) 0%, rgba(71, 85, 105, 0.95) 100%)",
     desc: "沉入海底的那句叹息，化作舌尖的冷冽。",
     base: "金酒", mid: "白桃", top: "薄荷",
-    analysis: { base: "金酒的冷冽，回应内心的静默。", mid: "白桃的清甜，是模糊的温柔。", top: "薄荷带来的清凉，冲破压抑。" }
+    analysis: { base: "金酒的冷冽，回应内心的静默。", mid: "白桃的清甜，是记忆中的温柔。", top: "薄荷带来的清凉，试图冲破压抑。" }
   },
   {
     name: "Velvet Sunset",
@@ -23,7 +28,7 @@ const FALLBACK_STYLES = [
     liquidColor: "linear-gradient(180deg, rgba(154, 52, 18, 0.9) 0%, rgba(255, 166, 158, 0.85) 100%)",
     desc: "将笑意酿成晚霞，余温尚存。",
     base: "朗姆", mid: "玫瑰", top: "西柚",
-    analysis: { base: "温润的陈年朗姆，呼应昂扬情绪。", mid: "玫瑰的馥郁，是对美好的留恋。", top: "西柚的微苦，是清醒与克制。" }
+    analysis: { base: "温润的陈年朗姆，呼应昂扬情绪。", mid: "玫瑰馥郁，是对美好的留恋。", top: "西柚微苦，是清醒与克制。" }
   },
   {
     name: "Emerald Dream",
@@ -35,17 +40,20 @@ const FALLBACK_STYLES = [
   }
 ];
 
-// 核心逻辑：AI 情绪分析 (终极修正版)
+// 核心逻辑：AI 情绪分析
 const analyzeMoodWithGemini = async (text) => {
-  if (!apiKey) return FALLBACK_STYLES[Math.floor(Math.random() * FALLBACK_STYLES.length)];
+  if (!apiKey) {
+    console.log("未检测到 API Key，使用离线模式。");
+    return FALLBACK_STYLES[Math.floor(Math.random() * FALLBACK_STYLES.length)];
+  }
 
   const systemPrompt = `You are a master mixologist. Analyze the user's mood and create a custom cocktail. Output JSON only. Use Simplified Chinese. Schema: { "name": "String", "cnName": "String", "liquidColor": "String (css rgba gradient)", "base": "String", "mid": "String", "top": "String", "desc": "String", "analysis": { "base": "String", "mid": "String", "top": "String" } }`;
   
-  // [关键修改] 前端只请求 /api/proxy，路径和模型在后端写死，防止转义错误
+  // [关键] 前端只请求 /api/proxy，不要拼接 path
   const url = `${API_BASE_URL}?key=${apiKey}`;
 
   let delay = 1000;
-  for (let i = 0; i < 3; i++) {
+  for (let i = 0; i < 2; i++) {
     try {
       const response = await fetch(url, {
         method: "POST",
@@ -61,25 +69,18 @@ const analyzeMoodWithGemini = async (text) => {
         const data = await response.json();
         const resultText = data.candidates?.[0]?.content?.parts?.[0]?.text.replace(/```json|```/g, '').trim();
         return JSON.parse(resultText);
-      } else if (response.status === 429) {
-        console.warn(`API 限流，${delay/1000}秒后重试...`);
       } else {
-        // 如果出错，打印出后端返回的具体错误信息
         const errorText = await response.text();
-        console.error("API Error Detail:", errorText);
-        throw new Error(`API Error: ${response.status}`);
+        console.warn(`API Error ${response.status}:`, errorText);
       }
-    } catch (error) {
-      console.warn(`请求尝试 ${i+1} 失败`);
-    }
+    } catch (error) { console.warn("Retry...", error); }
     await new Promise(r => setTimeout(r, delay));
     delay *= 2; 
   }
-  
   return FALLBACK_STYLES[Math.floor(Math.random() * FALLBACK_STYLES.length)];
 };
 
-
+// --- 背景组件 ---
 const AmbientBackground = () => (
   <div className="absolute inset-0 z-0 overflow-hidden bg-[#080808]">
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1, background: 'radial-gradient(circle at 50% 120%, #1e1b4b 0%, #000000 80%)' }} transition={{ duration: 2 }} className="absolute inset-0" />
@@ -88,6 +89,7 @@ const AmbientBackground = () => (
   </div>
 );
 
+// --- 量酒器 ---
 const Jigger = ({ isVisible }) => (
   <AnimatePresence>
     {isVisible && (
@@ -96,12 +98,14 @@ const Jigger = ({ isVisible }) => (
            <div className="w-10 h-14" style={{ background: 'linear-gradient(90deg, #444, #eee, #666)', clipPath: 'polygon(0 0, 100% 0, 75% 100%, 25% 100%)', boxShadow: 'inset 0 0 8px rgba(0,0,0,0.8)' }} />
            <div className="w-5 h-2 bg-[#888] mx-auto -mt-[1px]" />
            <div className="w-8 h-10 mx-auto -mt-[1px]" style={{ background: 'linear-gradient(90deg, #333, #ccc, #444)', clipPath: 'polygon(20% 0, 80% 0, 100% 100%, 0 100%)' }} />
+           <div className="absolute top-0 left-3 w-[1px] h-full bg-white/40 blur-[1px]" />
         </div>
       </motion.div>
     )}
   </AnimatePresence>
 );
 
+// --- 水柱 ---
 const PremiumStream = ({ isVisible }) => (
     <AnimatePresence>
         {isVisible && (
@@ -115,6 +119,7 @@ const PremiumStream = ({ isVisible }) => (
     </AnimatePresence>
 );
 
+// --- 杯身 ---
 const MartiniGlass = ({ mixingPhase, inputLength, cocktailData }) => {
   let liquidHeight;
   if (cocktailData) { liquidHeight = 82; } else {
@@ -133,11 +138,7 @@ const MartiniGlass = ({ mixingPhase, inputLength, cocktailData }) => {
       <div className="absolute bottom-0 w-24 h-4 bg-white/5 blur-xl opacity-30 rounded-full scale-x-150" />
       <div className="absolute top-0 left-0 w-full h-full z-40 pointer-events-none"><Jigger isVisible={mixingPhase === 'pouring'} /></div>
 
-      <motion.div 
-        className="relative z-20 flex flex-col items-center origin-bottom"
-        animate={mixingPhase === 'shaking' ? { rotate: [0, -6, 0, 6, 0], x: [0, -4, 0, 4, 0], y: [0, 2, 0, 2, 0] } : { rotate: 0, x: 0, y: 0 }}
-        transition={mixingPhase === 'shaking' ? { duration: 4, repeat: Infinity, ease: "easeInOut" } : { duration: 0.8, ease: "easeOut" }}
-      >
+      <motion.div className="relative z-20 flex flex-col items-center origin-bottom" animate={mixingPhase === 'shaking' ? { rotate: [0, -6, 0, 6, 0], x: [0, -4, 0, 4, 0], y: [0, 2, 0, 2, 0] } : { rotate: 0, x: 0, y: 0 }} transition={mixingPhase === 'shaking' ? { duration: 4, repeat: Infinity, ease: "easeInOut" } : { duration: 0.8, ease: "easeOut" }}>
         <div className="relative w-64 h-32 z-30">
             <div className="absolute inset-0 z-40 pointer-events-none" style={{ clipPath: 'polygon(-100% -1000%, 200% -1000%, 100% 0%, 50% 100%, 0% 0%)' }}><PremiumStream isVisible={mixingPhase === 'pouring'} /></div>
             <div className="absolute inset-0 overflow-hidden" style={{ clipPath: 'polygon(0% 0%, 100% 0%, 50% 100%)' }}>
@@ -147,6 +148,7 @@ const MartiniGlass = ({ mixingPhase, inputLength, cocktailData }) => {
                         {(mixingPhase !== 'idle' || cocktailData) && Array.from({ length: 10 }).map((_, i) => (
                             <motion.div key={i} className="absolute bg-white/40 rounded-full" style={{ width: 1.2, height: 1.2, left: `${Math.random() * 100}%`, top: '100%' }} animate={{ y: [0, -200], opacity: [0, 0.6, 0] }} transition={{ duration: 3, repeat: Infinity, delay: Math.random() * 2, ease: "linear" }} />
                         ))}
+                        {mixingPhase === 'pouring' && <motion.div className="absolute top-0 left-1/2 -translate-x-1/2 w-10 h-3 bg-white/30 blur-md rounded-full" animate={{ scale: [1, 1.5, 1], opacity: [0.4, 0.8, 0.4] }} transition={{ duration: 0.6, repeat: Infinity }} />}
                         <motion.div className="absolute top-0 w-full h-[4px] bg-white/20" style={{ borderRadius: '100%' }} animate={mixingPhase === 'shaking' ? { rotate: [0, 6, 0, -6, 0], scaleX: [1, 1.1, 1] } : { rotate: 0, scaleX: 1 }} transition={mixingPhase === 'shaking' ? { duration: 4, repeat: Infinity, ease: "easeInOut" } : { duration: 0.5 }} />
                     </motion.div>
                 </motion.div>
@@ -176,15 +178,13 @@ const PoeticLoader = ({ step }) => (
     </div>
 );
 
-// --- Share Modal (CDN 修复: 使用 unpkg) ---
+// --- Share Modal ---
 const ShareModal = ({ isOpen, onClose, cocktail, captureRef }) => {
     const [isGenerating, setIsGenerating] = useState(false);
     useEffect(() => {
         if (isOpen) {
             document.body.style.overflow = 'hidden';
-            // 确保只在点击分享时检测和加载
             if (!window.html2canvas) {
-                // 如果 index.html 里加载失败，这里做一个最后的补救
                 const script = document.createElement('script');
                 script.src = 'https://unpkg.com/html2canvas@1.4.1/dist/html2canvas.min.js';
                 document.body.appendChild(script);
@@ -279,17 +279,26 @@ export default function MoodMixologyApp() {
     setMixingPhase('pouring');
     setAnalysisStep("萃取思绪杂质...");
     
+    // 并行执行：API 和 动画
     const apiCall = analyzeMoodWithGemini(inputText);
+    // 等待 Jigger 动画和倒酒 (4.25s)
     await new Promise(r => setTimeout(r, 4250)); 
-    setTimeout(() => setMixingPhase('idle'), 100); 
+    
+    // 收起水柱和 Jigger
+    setTimeout(() => setMixingPhase('filled'), 100); 
     await new Promise(r => setTimeout(r, 750)); 
+
+    // 摇晃
     setMixingPhase('shaking');
     setAnalysisStep("感知情绪基调...");
+    // 确保 API 返回且摇晃至少 4s
     const minShaking = new Promise(r => setTimeout(r, 4000));
     const [result] = await Promise.all([apiCall, minShaking]);
+
     setMixingPhase('settling');
     setAnalysisStep("平衡风味层次...");
     await new Promise(r => setTimeout(r, 1500));
+
     setAnalysisStep("正在斟酒...");
     setCocktail(result);
     setAppState('result');
@@ -373,4 +382,3 @@ export default function MoodMixologyApp() {
     </div>
   );
 }
-
