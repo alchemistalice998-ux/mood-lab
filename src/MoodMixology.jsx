@@ -4,16 +4,14 @@ import { Share2, RefreshCw, Sparkles, Droplets, Wind, Heart, ChevronDown, Downlo
 
 // --- 配置区域 ---
 
-// [修复] 还原为通用定义，避免 ES2015 环境下的 import.meta 报错
-import.meta.env.VITE_GEMINI_API_KEY
-//const apiKey = ""; 
+// 1. API Key 配置
+// Vercel 会自动读取环境变量。如果没有配置环境变量，此处为空字符串，将触发 fallback 模式
+const apiKey = import.meta.env.VITE_GEMINI_API_KEY || ""; 
 
-// [关键配置] API 基础地址配置 (适配 Vercel Rewrites)
-// 1. 如果在 Vercel 部署并配置了 rewrites，请使用 "/api/proxy"
-// 2. 如果在本地直接测试且有网络环境，可以使用 "https://generativelanguage.googleapis.com"
+// 2. API 代理地址
 const API_BASE_URL = "/api/proxy";
 
-// 备用本地数据 (Fallback) - 当 API 超时或报错时使用
+// 备用本地数据 (Fallback) - 当 API 429 限流或网络错误时使用
 const FALLBACK_STYLES = [
   {
     name: "Midnight Echo",
@@ -53,11 +51,11 @@ const FALLBACK_STYLES = [
   }
 ];
 
-// 核心逻辑：AI 情绪分析 (修复版：抗 429 限流 + 错误静默处理)
+// 核心逻辑：AI 情绪分析 (深度修复：抗 429 限流 + 智能降级)
 const analyzeMoodWithGemini = async (text) => {
-  // 如果没有 Key，直接使用备用数据，不报错
+  // 如果没有 Key，直接使用备用数据
   if (!apiKey) {
-    console.log("未检测到 API Key，使用离线模式。");
+    console.warn("未检测到 API Key，已切换至离线模式。");
     return FALLBACK_STYLES[Math.floor(Math.random() * FALLBACK_STYLES.length)];
   }
 
@@ -87,8 +85,9 @@ const analyzeMoodWithGemini = async (text) => {
 
   const url = `${API_BASE_URL}/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
 
-  // 增加重试间隔，应对 429
-  let delay = 1000;
+  // [关键修复] 增加重试逻辑的“冷却时间”，防止频繁触发 429
+  let delay = 2000; // 初始等待 2 秒
+  
   for (let i = 0; i < 3; i++) {
     try {
       const response = await fetch(url, {
@@ -109,17 +108,23 @@ const analyzeMoodWithGemini = async (text) => {
         const resultText = data.candidates?.[0]?.content?.parts?.[0]?.text;
         return JSON.parse(resultText);
       } else if (response.status === 429) {
-        console.warn("API 繁忙 (429)，正在重试...");
-        delay = 2000 * (i + 1); // 遇到 429 增加等待时间
+        // 遇到 429 限流，打印警告并增加等待时间
+        console.warn(`API 限流 (429)，将在 ${delay/1000} 秒后重试...`);
+      } else {
+        // 其他错误直接抛出，进入 fallback
+        throw new Error(`API Error: ${response.status}`);
       }
     } catch (error) {
-      console.warn(`Attempt ${i+1} failed. Retrying...`);
+      console.warn(`第 ${i+1} 次请求尝试失败:`, error);
     }
+    
+    // 等待一段时间后再重试 (指数退避)
     await new Promise(r => setTimeout(r, delay));
+    delay *= 2; // 下次等待时间翻倍 (2s -> 4s -> 8s)
   }
   
-  // 如果所有尝试都失败，悄悄降级，不让用户发现
-  console.log("API 连接不稳定，已切换至备用配方。");
+  // 如果 3 次都失败了，优雅降级，不要让用户看到报错
+  console.log("API 连接繁忙，已切换至大师精选配方（Fallback）。");
   return FALLBACK_STYLES[Math.floor(Math.random() * FALLBACK_STYLES.length)];
 };
 
@@ -159,7 +164,7 @@ const Jigger = ({ isVisible }) => (
         }}
         exit={{ y: -400, opacity: 0, rotate: 0, transition: { duration: 0.8, ease: "easeInOut" } }}
         transition={{ 
-          duration: 4.5, 
+          duration: 5, 
           times: [0, 0.2, 0.3, 0.85, 1],
           ease: "easeInOut"
         }}
@@ -192,7 +197,7 @@ const Jigger = ({ isVisible }) => (
   </AnimatePresence>
 );
 
-// --- 高级水柱组件 (Premium Stream) ---
+// --- 高级水柱组件 ---
 const PremiumStream = ({ isVisible }) => (
     <AnimatePresence>
         {isVisible && (
@@ -285,7 +290,6 @@ const MartiniGlass = ({ mixingPhase, inputLength, cocktailData }) => {
                     initial={{ height: "5%" }}
                     animate={{ height: `${liquidHeight}%` }}
                     transition={{ 
-                        // 平滑过渡
                         height: { type: "spring", stiffness: 20, damping: 20 } 
                     }}
                 >
@@ -300,7 +304,6 @@ const MartiniGlass = ({ mixingPhase, inputLength, cocktailData }) => {
                             />
                         ))}
                         
-                        {/* 落点冲击波纹 */}
                         {mixingPhase === 'pouring' && (
                             <motion.div 
                                 className="absolute top-0 left-1/2 -translate-x-1/2 w-10 h-3 bg-white/30 blur-md rounded-full"
@@ -309,7 +312,6 @@ const MartiniGlass = ({ mixingPhase, inputLength, cocktailData }) => {
                             />
                         )}
 
-                        {/* 液面光圈 */}
                         <motion.div 
                              className="absolute top-0 w-full h-[4px] bg-white/20"
                              style={{ borderRadius: '100%' }}
@@ -349,7 +351,7 @@ const PoeticLoader = ({ step }) => (
     </div>
 );
 
-// --- 真实分享/下载面板组件 ---
+// --- 真实分享/下载面板组件 (CDN 修复) ---
 const ShareModal = ({ isOpen, onClose, cocktail, captureRef }) => {
     const [isGenerating, setIsGenerating] = useState(false);
     
@@ -358,8 +360,8 @@ const ShareModal = ({ isOpen, onClose, cocktail, captureRef }) => {
             document.body.style.overflow = 'hidden';
             if (!window.html2canvas) {
                 const script = document.createElement('script');
-                // 替换为更可靠的 cdnjs，防止被广告屏蔽插件拦截
-                script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
+                // [关键修改] 替换为 unpkg，解决 ERR_BLOCKED_BY_CLIENT
+                script.src = 'https://unpkg.com/html2canvas@1.4.1/dist/html2canvas.min.js';
                 document.body.appendChild(script);
             }
         } else {
