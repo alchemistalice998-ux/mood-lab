@@ -1,4 +1,3 @@
-// 这是一个运行在 Vercel 边缘节点的代码，专门负责转发 Google API
 export const config = {
   runtime: 'edge',
 };
@@ -6,23 +5,30 @@ export const config = {
 export default async function handler(req) {
   const url = new URL(req.url);
   
-  // 1. 提取请求路径，去掉 /api/proxy 前缀
-  // 例如: /api/proxy/v1beta/models/... -> /v1beta/models/...
-  const path = url.pathname.replace(/^\/api\/proxy/, '');
+  // 1. 提取路径
+  // 这里的 path 可能会以 "/" 开头，例如 "/v1beta/models/..."
+  let path = url.pathname.replace(/^\/api\/proxy/, '');
+  
+  // [关键修复]：如果 path 开头有斜杠，去掉它
+  // 这样后面拼接时就不会出现 "googleapis.com//v1beta" 的情况了
+  if (path.startsWith('/')) {
+    path = path.substring(1);
+  }
+  
   const query = url.search; 
 
-  // 2. 拼接真实的 Google API 地址
-  const targetUrl = `https://generativelanguage.googleapis.com${path}${query}`;
+  // 2. 拼接目标 URL
+  // 我们手动加一个 "/"，确保结构是 googleapis.com/v1beta...
+  const targetUrl = `https://generativelanguage.googleapis.com/${path}${query}`;
 
-  // 3. 处理请求头，避免跨域和 Host 冲突
   const headers = new Headers(req.headers);
   headers.delete('host');
   headers.delete('connection');
   headers.delete('origin');
+  headers.delete('referer'); // 移除 Referer 头，防止 Google 拒绝请求
   headers.set('Content-Type', 'application/json');
 
   try {
-    // 4. 发起转发请求
     const response = await fetch(targetUrl, {
       method: req.method,
       headers: headers,
@@ -31,12 +37,11 @@ export default async function handler(req) {
 
     const data = await response.text();
     
-    // 5. 返回结果给前端
     return new Response(data, {
       status: response.status,
       headers: {
         'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*', // 允许所有跨域
+        'Access-Control-Allow-Origin': '*',
       },
     });
 
