@@ -35,14 +35,17 @@ const FALLBACK_STYLES = [
   }
 ];
 
+// 核心逻辑：AI 情绪分析 (终极修正版)
 const analyzeMoodWithGemini = async (text) => {
   if (!apiKey) return FALLBACK_STYLES[Math.floor(Math.random() * FALLBACK_STYLES.length)];
 
   const systemPrompt = `You are a master mixologist. Analyze the user's mood and create a custom cocktail. Output JSON only. Use Simplified Chinese. Schema: { "name": "String", "cnName": "String", "liquidColor": "String (css rgba gradient)", "base": "String", "mid": "String", "top": "String", "desc": "String", "analysis": { "base": "String", "mid": "String", "top": "String" } }`;
-  const url = `${API_BASE_URL}/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+  
+  // [关键修改] 前端只请求 /api/proxy，路径和模型在后端写死，防止转义错误
+  const url = `${API_BASE_URL}?key=${apiKey}`;
 
   let delay = 1000;
-  for (let i = 0; i < 2; i++) {
+  for (let i = 0; i < 3; i++) {
     try {
       const response = await fetch(url, {
         method: "POST",
@@ -58,15 +61,24 @@ const analyzeMoodWithGemini = async (text) => {
         const data = await response.json();
         const resultText = data.candidates?.[0]?.content?.parts?.[0]?.text.replace(/```json|```/g, '').trim();
         return JSON.parse(resultText);
+      } else if (response.status === 429) {
+        console.warn(`API 限流，${delay/1000}秒后重试...`);
       } else {
-        console.warn(`API Error ${response.status}:`, await response.text());
+        // 如果出错，打印出后端返回的具体错误信息
+        const errorText = await response.text();
+        console.error("API Error Detail:", errorText);
+        throw new Error(`API Error: ${response.status}`);
       }
-    } catch (error) { console.warn("Retry...", error); }
+    } catch (error) {
+      console.warn(`请求尝试 ${i+1} 失败`);
+    }
     await new Promise(r => setTimeout(r, delay));
     delay *= 2; 
   }
+  
   return FALLBACK_STYLES[Math.floor(Math.random() * FALLBACK_STYLES.length)];
 };
+
 
 const AmbientBackground = () => (
   <div className="absolute inset-0 z-0 overflow-hidden bg-[#080808]">
@@ -361,3 +373,4 @@ export default function MoodMixologyApp() {
     </div>
   );
 }
+
