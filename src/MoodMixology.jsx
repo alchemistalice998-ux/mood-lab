@@ -9,7 +9,7 @@ import { Share2, RefreshCw, Sparkles, Droplets, Wind, Heart, ChevronDown, Downlo
 const apiKey = import.meta.env.VITE_GEMINI_API_KEY || ""; 
 
 // [关键配置] 指向 Vercel 的 Serverless Function 文件 api/proxy.js
-const API_BASE_URL = "https://gemini-proxy-xi.vercel.app/api/proxy";
+const API_BASE_URL = "/api/proxy";
 
 // 备用本地数据 (Fallback)
 const FALLBACK_STYLES = [
@@ -525,4 +525,5 @@ export default function MoodMixologyApp() {
     </div>
   );
 }
+
 
