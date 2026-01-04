@@ -14,7 +14,7 @@ export default async function handler(req) {
   }
 
   // [修改] 切换为 gemma-3-4b-it 模型
-  const targetUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemma-3-4b-it:generateContent?key=${apiKey}`;
+  const targetUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemma-3-12b-it:generateContent?key=${apiKey}`;
 
   try {
     // 1. 读取前端发送的数据
