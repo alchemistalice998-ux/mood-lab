@@ -67,7 +67,7 @@ const analyzeMoodWithGemini = async (text) => {
 
     REQUIREMENTS:
     1. Output VALID JSON ONLY. No markdown (no \`\`\`json), no intro text, no explanations.
-    2. Language: Simplified Chinese for content, English for 'name'.
+    2. Language: Simplified Chinese for ALL fields. Ensure all text values are in Chinese.
 
     JSON SCHEMA:
     {
@@ -575,6 +575,7 @@ export default function MoodMixologyApp() {
     </div>
   );
 }
+
 
 
 
