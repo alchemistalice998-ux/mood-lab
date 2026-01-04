@@ -51,50 +51,100 @@ const FALLBACK_STYLES = [
   }
 ];
 
-// 核心逻辑：AI 情绪分析
+// 核心逻辑：AI 情绪分析 (环境自适应版)
 const analyzeMoodWithGemini = async (text) => {
   if (!apiKey) {
     console.log("未检测到 API Key，使用离线模式。");
     return FALLBACK_STYLES[Math.floor(Math.random() * FALLBACK_STYLES.length)];
   }
 
-  const systemPrompt = `You are a master mixologist. Analyze the user's mood and create a custom cocktail. Output JSON only. Use Simplified Chinese. Schema: { "name": "String", "cnName": "String", "liquidColor": "String (css rgba gradient)", "base": "String", "mid": "String", "top": "String", "desc": "String", "analysis": { "base": "String", "mid": "String", "top": "String" } }`;
-  
-  // [关键修复] URL 不再包含长路径，直接指向 /api/proxy
-  // 后端的 proxy.js 会负责拼接 Google 的地址
-  const url = `${API_BASE_URL}?key=${apiKey}`;
+  // [兼容性处理] 将 System Prompt 合并到 User Prompt 中，适配 Gemma 模型
+  const prompt = `
+    Role: Expert Mixologist.
+    Task: Create a unique cocktail based on the user's mood.
+    
+    User Mood: "${text}"
 
-  // 增加重试逻辑，应对 429
+    REQUIREMENTS:
+    1. Output VALID JSON ONLY. No markdown (no \`\`\`json), no intro text, no explanations.
+    2. Language: Simplified Chinese for content, English for 'name'.
+
+    JSON SCHEMA:
+    {
+      "name": "String (English Name)",
+      "cnName": "String (Creative Chinese Name)",
+      "liquidColor": "String (CSS linear-gradient e.g. 'linear-gradient(180deg, red 0%, black 100%)')",
+      "base": "String (Base Spirit)",
+      "mid": "String (Middle Note)",
+      "top": "String (Garnish/Top Note)",
+      "desc": "String (Poetic description)",
+      "analysis": {
+        "base": "String (Reason)",
+        "mid": "String (Reason)",
+        "top": "String (Reason)"
+      }
+    }
+  `;
+  
+  // [关键修复] 动态决定 URL
+  // 如果是 Vercel 生产环境 (hostname 包含 vercel.app)，使用代理防止跨域/隐藏Key
+  // 如果是 预览环境 (blob/localhost)，使用直连 Google (前提是网络能通)
+  const isVercel = typeof window !== 'undefined' && window.location.hostname.includes('vercel.app');
+  
+  let url;
+  if (isVercel) {
+      // 生产环境：请求后端代理 (proxy.js 中需要确保已更新为 gemma-3-4b-it)
+      url = `/api/proxy?key=${apiKey}`;
+  } else {
+      // 预览/本地环境：直连 Google API
+      // 这里切换为 gemma-3-4b-it
+      url = `https://generativelanguage.googleapis.com/v1beta/models/gemma-3-4b-it:generateContent?key=${apiKey}`;
+  }
+
   let delay = 1000;
   for (let i = 0; i < 3; i++) {
     try {
+      console.log(`📡 [Attempt ${i+1}] Requesting: ${isVercel ? 'Vercel Proxy' : 'Google Direct (Gemma 3 4B)'}...`);
+      
       const response = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          contents: [{ parts: [{ text: `User's mood: "${text}"` }] }],
-          systemInstruction: { parts: [{ text: systemPrompt }] },
-          generationConfig: { responseMimeType: "application/json" }
+          contents: [{ parts: [{ text: prompt }] }],
+          // 移除可能导致 400 的高级配置，Gemma 不需要 responseMimeType
+          generationConfig: { 
+            temperature: 0.8,
+            maxOutputTokens: 1024
+          }
         }),
       });
 
       if (response.ok) {
         const data = await response.json();
-        const resultText = data.candidates?.[0]?.content?.parts?.[0]?.text.replace(/```json|```/g, '').trim();
-        return JSON.parse(resultText);
+        const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+        console.log("✅ API 响应成功");
+        
+        try {
+            // 提取 JSON (处理可能存在的 Markdown 包裹)
+            const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+            const cleanJson = jsonMatch ? jsonMatch[0] : rawText;
+            return JSON.parse(cleanJson);
+        } catch (e) {
+            console.warn("❌ JSON解析失败:", e);
+        }
       } else {
-        // 如果出错，打印状态码
-        console.warn(`API Error ${response.status}`);
+        const errText = await response.text();
+        console.error(`❌ API Error ${response.status}:`, errText);
       }
     } catch (error) {
-      console.warn(`Attempt ${i+1} failed.`);
+      console.error(`❌ 网络或执行错误 (Attempt ${i+1}):`, error);
     }
     // 指数退避等待
     await new Promise(r => setTimeout(r, delay));
     delay *= 2;
   }
   
-  // 失败则使用备用数据
+  console.warn("⚠️ 所有重试失败，切换至备用数据");
   return FALLBACK_STYLES[Math.floor(Math.random() * FALLBACK_STYLES.length)];
 };
 
@@ -525,5 +575,6 @@ export default function MoodMixologyApp() {
     </div>
   );
 }
+
 
 
