@@ -15,7 +15,7 @@ export default async function handler(req) {
   }
   
   // 2. 硬编码 Google 目标地址 (gemini-1.5-flash)
-  const targetUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+  const targetUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemma-3-4b-it:generateContent?key=${apiKey}`;
 
   try {
     // 3. 转发请求
