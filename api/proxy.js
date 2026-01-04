@@ -14,27 +14,25 @@ export default async function handler(req) {
     });
   }
   
-  // 2. 硬编码 Google 目标地址 (gemini-1.5-flash)
+  // 2. 硬编码 Google 目标地址 (gemma-3-4b-it)
   const targetUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemma-3-4b-it:generateContent?key=${apiKey}`;
 
   try {
-    // 3. 转发请求
     const response = await fetch(targetUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: req.body, // Edge Runtime 可以直接转发 body stream
+      body: req.body,
     });
 
     const data = await response.text();
     
-    // 4. 返回结果
     return new Response(data, {
       status: response.status,
       headers: {
         'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*', // 允许跨域
+        'Access-Control-Allow-Origin': '*',
       },
     });
 
