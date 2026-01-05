@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Share2, RefreshCw, Download, X, Loader2, UtensilsCrossed, ChefHat, Flame, Sparkles, Smile, Wine, ArrowLeft, ChevronDown } from 'lucide-react';
 
 // --- 全局配置 ---
-const apiKey = import.meta.env.VITE_GEMINI_API_KEY || ""; // 在此处填入 API Key
+const apiKey = ""; // 在此处填入 API Key
 const API_BASE_URL = "/api/proxy";
 
 // ==========================================
@@ -373,13 +373,11 @@ const FALLBACK_DISHES = [
   }
 ];
 
-// 修改：将默认超时时间增加到 30000ms (30秒)
 const preloadImage = (src, timeout = 30000) => {
     return new Promise((resolve) => {
         const img = new Image();
         let timer;
         const done = (success) => { clearTimeout(timer); resolve(success); };
-        // 超时时也 resolve false，避免应用卡死
         timer = setTimeout(() => { console.warn("图片加载超时"); done(false); }, timeout);
         img.src = src;
         img.onload = () => done(true);
@@ -400,7 +398,7 @@ const analyzeFoodMood = async (text) => {
     User Mood: "${text}"
     REQUIREMENTS:
     1. Output VALID JSON ONLY.
-    2. Language: Simplified Chinese for all fields.
+    2. Language: Simplified Chinese for display fields. English for imagePrompt.
     3. Style: Cute, healing, heartwarming.
     JSON SCHEMA:
     {
@@ -487,7 +485,7 @@ const CartoonPlate = ({ phase, dishData }) => {
           const img = new Image();
           img.src = dishData.imageUrl;
           img.onload = () => setImageLoaded(true);
-          img.onerror = () => setImageLoaded(true); // 如果缓存中有错误，也要确保状态翻转
+          img.onerror = () => setImageLoaded(true); 
       } else { setImageLoaded(false); }
   }, [dishData]);
 
@@ -505,7 +503,7 @@ const CartoonPlate = ({ phase, dishData }) => {
                             alt={dishData.name} 
                             className={`w-full h-full object-cover transition-opacity duration-500 ${imageLoaded ? 'opacity-100' : 'opacity-0'}`} 
                             onLoad={() => setImageLoaded(true)} 
-                            onError={() => setImageLoaded(true)} // 新增：如果图片加载失败，停止 loading 状态，避免无限转圈
+                            onError={() => setImageLoaded(true)} 
                         />
                         {!imageLoaded && <div className="absolute inset-0 flex items-center justify-center bg-orange-50"><UtensilsCrossed className="text-orange-200 animate-spin" size={32} /></div>}
                         <div className="absolute inset-0 rounded-full ring-inset ring-4 ring-black/5 pointer-events-none" />
@@ -553,6 +551,11 @@ const ShareFoodCard = ({ isOpen, onClose, dish, captureRef }) => {
                     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose} className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm" />
                     <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.8, opacity: 0 }} className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[90%] max-w-sm z-50 bg-white rounded-3xl p-6 shadow-xl border-4 border-orange-100">
                         <div className="flex justify-between items-center mb-6"><h3 className="text-xl font-cartoon font-bold text-orange-500">打包美好</h3><button onClick={onClose} className="p-2 bg-slate-100 rounded-full hover:bg-slate-200"><X size={20} className="text-slate-500" /></button></div>
+                        {/* 移除英文标题显示 */}
+                        <div className="text-center mb-4">
+                            <h2 className="text-3xl font-cartoon font-black text-slate-800 mb-2">{dish.cnName}</h2>
+                            <p className="text-lg text-slate-600 leading-relaxed font-medium bg-slate-50 p-3 rounded-2xl w-full">“{dish.desc}”</p>
+                        </div>
                         <button onClick={handleGeneratePoster} disabled={isGenerating} className="w-full py-4 rounded-xl bg-orange-400 text-white font-bold text-lg shadow-lg shadow-orange-200 hover:bg-orange-500 hover:scale-105 transition-all flex items-center justify-center gap-2">
                             {isGenerating ? <Loader2 className="animate-spin" /> : <Download />} {isGenerating ? "制作中..." : "保存卡片"}
                         </button>
@@ -643,7 +646,7 @@ const MoodDiningApp = ({ onBack }) => {
     <div className="relative w-full min-h-screen bg-[#ffedd5] text-slate-700 font-cartoon flex flex-col items-center overflow-x-hidden selection:bg-orange-200">
       <CartoonBackground />
       <div className="absolute top-6 left-6 z-50">
-        <button onClick={onBack} className="flex items-center gap-2 text-slate-400 hover:text-orange-500 transition-colors text-xs font-bold tracking-widest uppercase"><ArrowLeft size={14}/> Back</button>
+        <button onClick={onBack} className="flex items-center gap-2 text-slate-400 hover:text-orange-500 transition-colors text-xs font-bold tracking-widest uppercase"><ArrowLeft size={14}/> 返回</button>
       </div>
       <div ref={posterRef} className="w-full flex flex-col items-center bg-transparent relative z-10 pb-20"> 
           <header className="w-full flex flex-col items-center pt-20 pb-4 shrink-0">
@@ -651,7 +654,7 @@ const MoodDiningApp = ({ onBack }) => {
                   <ChefHat size={24} className="text-orange-500" />
                   <span className="text-2xl font-cartoon font-bold text-slate-800 tracking-wide">心境小食堂</span>
               </div>
-              <p className="mt-3 text-slate-400 text-xs font-bold tracking-widest uppercase">Mood Dining · Cozy Edition</p>
+              <p className="mt-3 text-slate-400 text-xs font-bold tracking-widest uppercase">心境食堂 · 治愈时刻</p>
           </header>
 
           <main ref={containerRef} className="w-full max-w-md px-6 flex-1 flex flex-col items-center relative">
@@ -680,7 +683,7 @@ const MoodDiningApp = ({ onBack }) => {
                     <motion.div key="result" initial={{ opacity: 0, y: 40 }} animate={{ opacity: 1, y: 0 }} className="w-full bg-white rounded-3xl p-8 shadow-xl border-b-8 border-orange-100 flex flex-col items-center text-center">
                         <div className="inline-block px-4 py-1 bg-orange-100 text-orange-600 rounded-full text-xs font-bold mb-4 tracking-wider uppercase">为你特调</div>
                         <h2 className="text-3xl font-cartoon font-black text-slate-800 mb-2">{dish.cnName}</h2>
-                        <p className="text-sm text-slate-400 font-bold mb-6">{dish.name}</p>
+                        {/* 移除英文名称 */}
                         <p className="text-lg text-slate-600 leading-relaxed font-medium mb-8 bg-slate-50 p-4 rounded-2xl w-full">“{dish.desc}”</p>
                         <div className="w-full grid gap-4 text-left">
                             {[{ label: '主料', val: dish.main, icon: '🥘', desc: dish.analysis.main }, { label: '配菜', val: dish.side, icon: '🥗', desc: dish.analysis.side }, { label: '魔法', val: dish.garnish, icon: '✨', desc: dish.analysis.garnish }].map((item, i) => (
@@ -748,8 +751,8 @@ const LandingPage = ({ onSelectMode }) => {
                         <div className="w-16 h-16 rounded-full bg-white shadow-sm border border-orange-100 flex items-center justify-center mb-6 text-orange-400 group-hover:text-orange-500 group-hover:scale-110 transition-all group-hover:shadow-md"><UtensilsCrossed size={28} strokeWidth={2} /></div>
                     </motion.div>
                     <motion.h2 initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.3 }} className="text-3xl font-bold text-slate-800 tracking-wide mb-2" style={{ fontFamily: 'M PLUS Rounded 1c, sans-serif' }}>心境食堂</motion.h2>
-                    <motion.p initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.4 }} className="text-[10px] uppercase tracking-[0.4em] text-slate-400 group-hover:text-orange-400 transition-colors">Cozy Dining</motion.p>
-                    <div className="mt-8 px-6 py-2 bg-orange-400 text-white text-xs font-bold tracking-widest uppercase rounded-full shadow-lg shadow-orange-200 transition-all duration-500 hover:scale-105 hover:bg-orange-500">Enter</div>
+                    <motion.p initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.4 }} className="text-[10px] uppercase tracking-[0.4em] text-slate-400 group-hover:text-orange-400 transition-colors">治愈料理</motion.p>
+                    <div className="mt-8 px-6 py-2 bg-orange-400 text-white text-xs font-bold tracking-widest uppercase rounded-full shadow-lg shadow-orange-200 transition-all duration-500 hover:scale-105 hover:bg-orange-500">进入</div>
                 </div>
             </div>
             
@@ -792,5 +795,3 @@ export default function App() {
     </div>
   );
 }
-
-
