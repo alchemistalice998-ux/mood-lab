@@ -87,12 +87,12 @@ const analyzeMoodWithGemini = async (text) => {
   `;
   
   // 生产环境：请求后端代理 (proxy.js 中需要确保已更新为 gemma-3-4b-it)
-  url = `/api/proxy?key=${apiKey}`;
+  const cons = `/api/proxy?key=${apiKey}`;
 
   let delay = 1000;
   for (let i = 0; i < 3; i++) {
     try {
-      console.log(`📡 [Attempt ${i+1}] Requesting: ${isVercel ? 'Vercel Proxy' : 'Google Direct (Gemma 3 4B)'}...`);
+      console.log(`📡 [Attempt ${i+1}] Requesting: ${'Vercel Proxy' `);
       
       const response = await fetch(url, {
         method: "POST",
@@ -563,6 +563,7 @@ export default function MoodMixologyApp() {
     </div>
   );
 }
+
 
 
 
