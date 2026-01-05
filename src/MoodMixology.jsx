@@ -400,7 +400,7 @@ const analyzeFoodMood = async (text) => {
     User Mood: "${text}"
     REQUIREMENTS:
     1. Output VALID JSON ONLY.
-    2. Language: Simplified Chinese for display fields. English for imagePrompt.
+    2. Language: Simplified Chinese for all fields.
     3. Style: Cute, healing, heartwarming.
     JSON SCHEMA:
     {
@@ -792,4 +792,5 @@ export default function App() {
     </div>
   );
 }
+
 
