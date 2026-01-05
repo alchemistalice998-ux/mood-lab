@@ -392,23 +392,26 @@ const analyzeFoodMood = async (text) => {
     return FALLBACK_DISHES[Math.floor(Math.random() * FALLBACK_DISHES.length)];
   }
 
+  // 强化 Prompt，明确要求中文输出
   const prompt = `
     Role: A cute, heartwarming anime chef.
     Task: Recommend a comforting dish based on user's mood.
     User Mood: "${text}"
     REQUIREMENTS:
     1. Output VALID JSON ONLY.
-    2. Language: Simplified Chinese for display fields. English for imagePrompt.
+    2. Language: Simplified Chinese for ALL text fields (cnName, desc, analysis, main, side, garnish). English ONLY for imagePrompt.
     3. Style: Cute, healing, heartwarming.
     JSON SCHEMA:
     {
-      "name": "String (English Name)",
+      "name": "String (English Name - NOT DISPLAYED BUT REQUIRED)",
       "cnName": "String (Cute Chinese Name)",
       "themeColor": "String (CSS linear-gradient, bright and appetizing)",
-      "main": "String", "side": "String", "garnish": "String",
-      "desc": "String (Cute, healing description)",
+      "main": "String (Chinese)", 
+      "side": "String (Chinese)", 
+      "garnish": "String (Chinese)",
+      "desc": "String (Cute, healing description in Chinese)",
       "imagePrompt": "String (English prompt for image gen. Keywords: 'cute chibi food', 'kawaii', 'flat vector', 'simple', 'white background', 'isolated')",
-      "analysis": { "main": "String", "side": "String", "garnish": "String" }
+      "analysis": { "main": "String (Chinese)", "side": "String (Chinese)", "garnish": "String (Chinese)" }
     }
   `;
   
@@ -551,7 +554,6 @@ const ShareFoodCard = ({ isOpen, onClose, dish, captureRef }) => {
                     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose} className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm" />
                     <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.8, opacity: 0 }} className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[90%] max-w-sm z-50 bg-white rounded-3xl p-6 shadow-xl border-4 border-orange-100">
                         <div className="flex justify-between items-center mb-6"><h3 className="text-xl font-cartoon font-bold text-orange-500">打包美好</h3><button onClick={onClose} className="p-2 bg-slate-100 rounded-full hover:bg-slate-200"><X size={20} className="text-slate-500" /></button></div>
-                        {/* 移除英文标题显示 */}
                         <div className="text-center mb-4">
                             <h2 className="text-3xl font-cartoon font-black text-slate-800 mb-2">{dish.cnName}</h2>
                             <p className="text-lg text-slate-600 leading-relaxed font-medium bg-slate-50 p-3 rounded-2xl w-full">“{dish.desc}”</p>
@@ -577,7 +579,6 @@ const MoodDiningApp = ({ onBack }) => {
   const posterRef = useRef(null); 
   const containerRef = useRef(null);
 
-  // 优化：放慢文案循环速度 (3秒一次)
   useEffect(() => {
     let interval;
     if (appState === 'cooking') {
@@ -591,7 +592,7 @@ const MoodDiningApp = ({ onBack }) => {
         interval = setInterval(() => {
             i = (i + 1) % messages.length;
             setLoadingText(messages[i]);
-        }, 3000); // 3000ms = 3秒
+        }, 3000);
     }
     return () => clearInterval(interval);
   }, [appState]);
@@ -603,27 +604,19 @@ const MoodDiningApp = ({ onBack }) => {
     setAppState('cooking');
     setVisualPhase('cooking');
     
-    // 1. 获取文本数据 (JSON)
     const apiCall = analyzeFoodMood(inputText);
-    // 保持一定的等待时间，让动画至少播放2.5秒
     await new Promise(r => setTimeout(r, 2500));
     
     const result = await apiCall;
     
     if (result) {
-        // 2. 只有拿到结果后，才开始生成和加载图片
-        // 此时 appState 依然是 'cooking'，用户看到的是正在烹饪的动画和循环文案
-        
         const styleSuffix = " kawaii chibi food, adorable style, soft pastel colors, sticker art, thick rounded outlines, white background, simple vector, flat design, no photorealism, high quality 2d art, cute game asset";
         const finalPrompt = (result.imagePrompt || result.name + " cute food") + styleSuffix;
         const seed = Math.floor(Math.random() * 1000);
-        // 加上时间戳防止缓存
         const generatedImageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(finalPrompt)}?width=512&height=512&nologo=true&seed=${seed}&t=${Date.now()}`;
         
-        // 3. 关键：等待图片完全下载！超时时间设为30秒
         await preloadImage(generatedImageUrl, 30000);
         
-        // 4. 图片加载完毕，才切换状态
         result.imageUrl = generatedImageUrl;
         setDish(result);
         setAppState('result');
@@ -795,4 +788,3 @@ export default function App() {
     </div>
   );
 }
-
