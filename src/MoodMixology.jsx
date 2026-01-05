@@ -6,7 +6,7 @@ import { Share2, RefreshCw, ChevronDown, Download, X, Loader2 } from 'lucide-rea
 
 // [修复] 在此环境中直接初始化为空字符串，避免 import.meta 报错
 // 如果你有 Gemini API Key，可以填入此处进行测试，例如: "AIzaSy..."
-const apiKey = ""; 
+const apiKey = import.meta.env.VITE_GEMINI_API_KEY || ""; 
 
 // [关键配置] 指向 Vercel 的 Serverless Function 文件 api/proxy.js
 const API_BASE_URL = "/api/proxy";
@@ -565,3 +565,4 @@ export default function MoodMixologyApp() {
     </div>
   );
 }
+
