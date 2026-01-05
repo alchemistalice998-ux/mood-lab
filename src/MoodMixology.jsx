@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Share2, RefreshCw, Download, X, Loader2, UtensilsCrossed, ChefHat, Flame, Sparkles, Smile, Wine, ArrowLeft, ChevronDown } from 'lucide-react';
 
 // --- 全局配置 ---
-const apiKey = import.meta.env.VITE_GEMINI_API_KEY || ""; // 在此处填入 API Key
+const apiKey = ""; // 在此处填入 API Key
 const API_BASE_URL = "/api/proxy";
 
 // ==========================================
@@ -373,11 +373,13 @@ const FALLBACK_DISHES = [
   }
 ];
 
-const preloadImage = (src, timeout = 15000) => {
+// 修改：将默认超时时间增加到 30000ms (30秒)
+const preloadImage = (src, timeout = 30000) => {
     return new Promise((resolve) => {
         const img = new Image();
         let timer;
         const done = (success) => { clearTimeout(timer); resolve(success); };
+        // 超时时也 resolve false，避免应用卡死
         timer = setTimeout(() => { console.warn("图片加载超时"); done(false); }, timeout);
         img.src = src;
         img.onload = () => done(true);
@@ -485,6 +487,7 @@ const CartoonPlate = ({ phase, dishData }) => {
           const img = new Image();
           img.src = dishData.imageUrl;
           img.onload = () => setImageLoaded(true);
+          img.onerror = () => setImageLoaded(true); // 如果缓存中有错误，也要确保状态翻转
       } else { setImageLoaded(false); }
   }, [dishData]);
 
@@ -497,7 +500,13 @@ const CartoonPlate = ({ phase, dishData }) => {
             <AnimatePresence mode="wait">
                 {isServed && dishData ? (
                     <motion.div key="food" initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ type: "spring", bounce: 0.4 }} className="w-full h-full relative overflow-hidden">
-                        <img src={dishData.imageUrl} alt={dishData.name} className={`w-full h-full object-cover transition-opacity duration-500 ${imageLoaded ? 'opacity-100' : 'opacity-0'}`} onLoad={() => setImageLoaded(true)} />
+                        <img 
+                            src={dishData.imageUrl} 
+                            alt={dishData.name} 
+                            className={`w-full h-full object-cover transition-opacity duration-500 ${imageLoaded ? 'opacity-100' : 'opacity-0'}`} 
+                            onLoad={() => setImageLoaded(true)} 
+                            onError={() => setImageLoaded(true)} // 新增：如果图片加载失败，停止 loading 状态，避免无限转圈
+                        />
                         {!imageLoaded && <div className="absolute inset-0 flex items-center justify-center bg-orange-50"><UtensilsCrossed className="text-orange-200 animate-spin" size={32} /></div>}
                         <div className="absolute inset-0 rounded-full ring-inset ring-4 ring-black/5 pointer-events-none" />
                         <div className="absolute top-0 left-0 w-full h-1/2 bg-gradient-to-b from-white/20 to-transparent pointer-events-none" />
@@ -608,8 +617,8 @@ const MoodDiningApp = ({ onBack }) => {
         // 加上时间戳防止缓存
         const generatedImageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(finalPrompt)}?width=512&height=512&nologo=true&seed=${seed}&t=${Date.now()}`;
         
-        // 3. 关键：等待图片完全下载！超时时间设为15秒
-        await preloadImage(generatedImageUrl, 15000);
+        // 3. 关键：等待图片完全下载！超时时间设为30秒
+        await preloadImage(generatedImageUrl, 30000);
         
         // 4. 图片加载完毕，才切换状态
         result.imageUrl = generatedImageUrl;
