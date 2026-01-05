@@ -554,6 +554,7 @@ const ShareFoodCard = ({ isOpen, onClose, dish, captureRef }) => {
                     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose} className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm" />
                     <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.8, opacity: 0 }} className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[90%] max-w-sm z-50 bg-white rounded-3xl p-6 shadow-xl border-4 border-orange-100">
                         <div className="flex justify-between items-center mb-6"><h3 className="text-xl font-cartoon font-bold text-orange-500">打包美好</h3><button onClick={onClose} className="p-2 bg-slate-100 rounded-full hover:bg-slate-200"><X size={20} className="text-slate-500" /></button></div>
+                        {/* 移除英文标题显示 */}
                         <div className="text-center mb-4">
                             <h2 className="text-3xl font-cartoon font-black text-slate-800 mb-2">{dish.cnName}</h2>
                             <p className="text-lg text-slate-600 leading-relaxed font-medium bg-slate-50 p-3 rounded-2xl w-full">“{dish.desc}”</p>
@@ -610,7 +611,8 @@ const MoodDiningApp = ({ onBack }) => {
     const result = await apiCall;
     
     if (result) {
-        const styleSuffix = " kawaii chibi food, adorable style, soft pastel colors, sticker art, thick rounded outlines, white background, simple vector, flat design, no photorealism, high quality 2d art, cute game asset";
+        // 关键修改：增加 "no faces", "no eyes", "no anthropomorphism" 等反向提示词，防止拟人化
+        const styleSuffix = " cute cartoon food illustration, delicious looking, soft pastel colors, sticker art, thick rounded outlines, white background, simple vector, flat design, no photorealism, high quality 2d art, game asset, no faces, no eyes, no anthropomorphism, object only";
         const finalPrompt = (result.imagePrompt || result.name + " cute food") + styleSuffix;
         const seed = Math.floor(Math.random() * 1000);
         const generatedImageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(finalPrompt)}?width=512&height=512&nologo=true&seed=${seed}&t=${Date.now()}`;
@@ -718,8 +720,23 @@ const MoodDiningApp = ({ onBack }) => {
 const LandingPage = ({ onSelectMode }) => {
     return (
         <div className="relative w-full h-screen flex flex-col md:flex-row overflow-hidden font-serif">
-            {/* 左侧：酒吧入口 */}
-            <div className="relative flex-1 h-1/2 md:h-full group cursor-pointer overflow-hidden border-b md:border-b-0 md:border-r border-white/10" onClick={() => onSelectMode('mixology')}>
+            {/* 左侧：食堂入口 (位置对调至左侧) */}
+            <div className="relative flex-1 h-1/2 md:h-full group cursor-pointer overflow-hidden border-b md:border-b-0 md:border-r border-white/10" onClick={() => onSelectMode('dining')}>
+                <div className="absolute inset-0 bg-[#fff7ed] transition-transform duration-700 group-hover:scale-105">
+                    <div className="absolute inset-0 opacity-40" style={{ backgroundImage: 'radial-gradient(#fed7aa 20%, transparent 20%)', backgroundSize: '24px 24px' }} />
+                </div>
+                <div className="absolute inset-0 flex flex-col items-center justify-center z-10 p-8 transition-all duration-500 group-hover:bg-orange-50/50">
+                    <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.2 }}>
+                        <div className="w-16 h-16 rounded-full bg-white shadow-sm border border-orange-100 flex items-center justify-center mb-6 text-orange-400 group-hover:text-orange-500 group-hover:scale-110 transition-all group-hover:shadow-md"><UtensilsCrossed size={28} strokeWidth={2} /></div>
+                    </motion.div>
+                    <motion.h2 initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.3 }} className="text-3xl font-bold text-slate-800 tracking-wide mb-2" style={{ fontFamily: 'M PLUS Rounded 1c, sans-serif' }}>心境食堂</motion.h2>
+                    <motion.p initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.4 }} className="text-[10px] uppercase tracking-[0.4em] text-slate-400 group-hover:text-orange-400 transition-colors">治愈料理</motion.p>
+                    <div className="mt-8 px-6 py-2 bg-orange-400 text-white text-xs font-bold tracking-widest uppercase rounded-full shadow-lg shadow-orange-200 transition-all duration-500 hover:scale-105 hover:bg-orange-500">进入</div>
+                </div>
+            </div>
+
+            {/* 右侧：酒吧入口 (位置对调至右侧) */}
+            <div className="relative flex-1 h-1/2 md:h-full group cursor-pointer overflow-hidden" onClick={() => onSelectMode('mixology')}>
                 <div className="absolute inset-0 bg-[#050505] transition-transform duration-700 group-hover:scale-105">
                      <div className="absolute inset-0 opacity-40 bg-[radial-gradient(circle_at_50%_120%,#1e1b4b,transparent)]" />
                      <div className="absolute inset-0 opacity-[0.05]" style={{ backgroundImage: `url("https://grainy-gradients.vercel.app/noise.svg")` }} />
@@ -731,21 +748,6 @@ const LandingPage = ({ onSelectMode }) => {
                     <motion.h2 initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.3 }} className="text-3xl font-light italic text-white tracking-widest mb-2 font-serif">Mood Bar</motion.h2>
                     <motion.p initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.4 }} className="text-[10px] uppercase tracking-[0.4em] text-white/40 group-hover:text-white/70 transition-colors">Mixology Lab</motion.p>
                     <div className="mt-8 px-6 py-2 border border-white/20 text-white/60 text-xs tracking-widest uppercase transition-all duration-500 hover:bg-white/10 hover:text-white">Enter</div>
-                </div>
-            </div>
-
-            {/* 右侧：食堂入口 */}
-            <div className="relative flex-1 h-1/2 md:h-full group cursor-pointer overflow-hidden" onClick={() => onSelectMode('dining')}>
-                <div className="absolute inset-0 bg-[#fff7ed] transition-transform duration-700 group-hover:scale-105">
-                    <div className="absolute inset-0 opacity-40" style={{ backgroundImage: 'radial-gradient(#fed7aa 20%, transparent 20%)', backgroundSize: '24px 24px' }} />
-                </div>
-                <div className="absolute inset-0 flex flex-col items-center justify-center z-10 p-8 transition-all duration-500 group-hover:bg-orange-50/50">
-                    <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.2 }}>
-                        <div className="w-16 h-16 rounded-full bg-white shadow-sm border border-orange-100 flex items-center justify-center mb-6 text-orange-400 group-hover:text-orange-500 group-hover:scale-110 transition-all group-hover:shadow-md"><UtensilsCrossed size={28} strokeWidth={2} /></div>
-                    </motion.div>
-                    <motion.h2 initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.3 }} className="text-3xl font-bold text-slate-800 tracking-wide mb-2" style={{ fontFamily: 'M PLUS Rounded 1c, sans-serif' }}>心境食堂</motion.h2>
-                    <motion.p initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.4 }} className="text-[10px] uppercase tracking-[0.4em] text-slate-400 group-hover:text-orange-400 transition-colors">治愈料理</motion.p>
-                    <div className="mt-8 px-6 py-2 bg-orange-400 text-white text-xs font-bold tracking-widest uppercase rounded-full shadow-lg shadow-orange-200 transition-all duration-500 hover:scale-105 hover:bg-orange-500">进入</div>
                 </div>
             </div>
             
@@ -775,12 +777,12 @@ export default function App() {
            </motion.div>
         )}
         {mode === 'mixology' && (
-           <motion.div key="mixology" initial={{ opacity: 0, x: -50 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -50 }} className="w-full h-full">
+           <motion.div key="mixology" initial={{ opacity: 0, x: 50 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 50 }} className="w-full h-full">
                <MoodMixologyApp onBack={() => setMode('landing')} />
            </motion.div>
         )}
         {mode === 'dining' && (
-           <motion.div key="dining" initial={{ opacity: 0, x: 50 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 50 }} className="w-full h-full">
+           <motion.div key="dining" initial={{ opacity: 0, x: -50 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -50 }} className="w-full h-full">
                <MoodDiningApp onBack={() => setMode('landing')} />
            </motion.div>
         )}
