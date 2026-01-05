@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Share2, RefreshCw, Sparkles, Droplets, Wind, Heart, ChevronDown, Download, X, Loader2 } from 'lucide-react';
+import { Share2, RefreshCw, ChevronDown, Download, X, Loader2 } from 'lucide-react';
 
 // --- 配置区域 ---
 
-// [环境变量] 本地开发请在 .env 文件配置 VITE_GEMINI_API_KEY
-// Vercel 部署请在 Settings -> Environment Variables 配置
-const apiKey = import.meta.env.VITE_GEMINI_API_KEY || ""; 
+// [修复] 在此环境中直接初始化为空字符串，避免 import.meta 报错
+// 如果你有 Gemini API Key，可以填入此处进行测试，例如: "AIzaSy..."
+const apiKey = ""; 
 
 // [关键配置] 指向 Vercel 的 Serverless Function 文件 api/proxy.js
 const API_BASE_URL = "/api/proxy";
@@ -53,8 +53,10 @@ const FALLBACK_STYLES = [
 
 // 核心逻辑：AI 情绪分析 (环境自适应版)
 const analyzeMoodWithGemini = async (text) => {
+  // 如果没有 API Key，使用模拟延迟后返回备用数据
   if (!apiKey) {
     console.log("未检测到 API Key，使用离线模式。");
+    await new Promise(r => setTimeout(r, 2000)); // 模拟思考时间
     return FALLBACK_STYLES[Math.floor(Math.random() * FALLBACK_STYLES.length)];
   }
 
@@ -86,13 +88,13 @@ const analyzeMoodWithGemini = async (text) => {
     }
   `;
   
-  // 生产环境：请求后端代理 (proxy.js 中需要确保已更新为 gemma-3-4b-it)
-  const url = `/api/proxy?key=${apiKey}`;
+  // [修复 1] 添加 const 声明 url
+  const url = `${API_BASE_URL}?key=${apiKey}`;
 
   let delay = 1000;
   for (let i = 0; i < 3; i++) {
     try {
-      console.log(`📡 [Attempt ${i+1}] Requesting: ${'Vercel Proxy' `);
+      console.log(`📡 [Attempt ${i+1}] Requesting API...`);
       
       const response = await fetch(url, {
         method: "POST",
@@ -563,10 +565,3 @@ export default function MoodMixologyApp() {
     </div>
   );
 }
-
-
-
-
-
-
-
