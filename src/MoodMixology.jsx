@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Share2, RefreshCw, Download, X, Loader2, UtensilsCrossed, ChefHat, Flame, Sparkles, Smile, Wine, ArrowLeft, ChevronDown } from 'lucide-react';
 
 // --- 全局配置 ---
-const apiKey = ""; // 在此处填入 API Key
+const apiKey = import.meta.env.VITE_GEMINI_API_KEY || ""; // 在此处填入 API Key
 const API_BASE_URL = "/api/proxy";
 
 // ==========================================
@@ -795,3 +795,4 @@ export default function App() {
     </div>
   );
 }
+
