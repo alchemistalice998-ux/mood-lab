@@ -86,20 +86,8 @@ const analyzeMoodWithGemini = async (text) => {
     }
   `;
   
-  // [关键修复] 动态决定 URL
-  // 如果是 Vercel 生产环境 (hostname 包含 vercel.app)，使用代理防止跨域/隐藏Key
-  // 如果是 预览环境 (blob/localhost)，使用直连 Google (前提是网络能通)
-  const isVercel = typeof window !== 'undefined' && window.location.hostname.includes('vercel.app');
-  
-  let url;
-  if (isVercel) {
-      // 生产环境：请求后端代理 (proxy.js 中需要确保已更新为 gemma-3-4b-it)
-      url = `/api/proxy?key=${apiKey}`;
-  } else {
-      // 预览/本地环境：直连 Google API
-      // 这里切换为 gemma-3-4b-it
-      url = `https://generativelanguage.googleapis.com/v1beta/models/gemma-3-4b-it:generateContent?key=${apiKey}`;
-  }
+  // 生产环境：请求后端代理 (proxy.js 中需要确保已更新为 gemma-3-4b-it)
+  url = `/api/proxy?key=${apiKey}`;
 
   let delay = 1000;
   for (let i = 0; i < 3; i++) {
@@ -575,6 +563,7 @@ export default function MoodMixologyApp() {
     </div>
   );
 }
+
 
 
 
