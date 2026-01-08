@@ -531,6 +531,45 @@ const CartoonLoader = ({ step }) => (
     </div>
 );
 
+// 新增：食堂风格的下滑提示组件 (升级版：更温馨高级)
+const CartoonScrollIndicator = ({ visible }) => (
+    <AnimatePresence>
+        {visible && (
+            <motion.div 
+                initial={{ opacity: 0, y: 10 }} 
+                animate={{ opacity: 1, y: 0 }} 
+                exit={{ opacity: 0, y: 10 }} 
+                transition={{ duration: 0.8, ease: "easeOut" }}
+                className="fixed bottom-10 left-0 w-full flex flex-col items-center justify-center z-50 pointer-events-none"
+            >
+                <motion.div 
+                    className="flex flex-col items-center gap-3"
+                    animate={{ y: [0, 8, 0] }}
+                    transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
+                >
+                     {/* 装饰：上方垂下来的淡淡线条 */}
+                     <div className="h-6 w-[1.5px] bg-gradient-to-b from-transparent to-orange-300/40 rounded-full" />
+
+                     {/* 提示胶囊：磨砂玻璃 + 柔光阴影 */}
+                     <div className="relative">
+                        {/* 氛围光晕 */}
+                        <div className="absolute inset-0 bg-orange-200/30 blur-xl rounded-full scale-110" />
+                        
+                        <div className="relative bg-white/80 backdrop-blur-md pl-6 pr-5 py-3 rounded-full border border-white/50 shadow-[0_8px_20px_-6px_rgba(251,146,60,0.15)] flex items-center gap-3">
+                            <span className="text-[11px] tracking-[0.25em] font-bold text-orange-800/60 font-cartoon">
+                                下滑 · 领取今日份治愈
+                            </span>
+                            <div className="bg-orange-50 rounded-full p-1.5 shadow-inner">
+                                <ChevronDown size={12} className="text-orange-400" strokeWidth={3} />
+                            </div>
+                        </div>
+                     </div>
+                </motion.div>
+            </motion.div>
+        )}
+    </AnimatePresence>
+);
+
 const ShareFoodCard = ({ isOpen, onClose, dish, captureRef }) => {
     const [isGenerating, setIsGenerating] = useState(false);
     useEffect(() => {
@@ -577,8 +616,20 @@ const MoodDiningApp = ({ onBack }) => {
   const [loadingText, setLoadingText] = useState('');
   const [visualPhase, setVisualPhase] = useState('idle');
   const [showShareModal, setShowShareModal] = useState(false);
+  // 新增：控制下滑提示的显示
+  const [showScrollHint, setShowScrollHint] = useState(false);
   const posterRef = useRef(null); 
   const containerRef = useRef(null);
+
+  // 监听滚动，控制下滑提示的显示
+  useEffect(() => {
+      if (appState === 'result') {
+          setShowScrollHint(true);
+          const handleScroll = () => { if (window.scrollY > 50) setShowScrollHint(false); };
+          window.addEventListener('scroll', handleScroll);
+          return () => window.removeEventListener('scroll', handleScroll);
+      } else { setShowScrollHint(false); }
+  }, [appState]);
 
   useEffect(() => {
     let interval;
@@ -704,6 +755,8 @@ const MoodDiningApp = ({ onBack }) => {
             </div>
           </main>
       </div>
+      {/* 新增：食堂风格的下滑提示 */}
+      <CartoonScrollIndicator visible={showScrollHint} />
       <ShareFoodCard isOpen={showShareModal} onClose={() => setShowShareModal(false)} dish={dish} captureRef={posterRef} />
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@300;400;500;600;700&family=M+PLUS+Rounded+1c:wght@300;400;500;700&display=swap');
